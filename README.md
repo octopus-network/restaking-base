@@ -5,19 +5,20 @@ This contract aims to provide two main functionalities. The first one is to prox
 Contents:
 
 - [Restaking Base](#restaking-base)
-	- [Terminology](#terminology)
-	- [Function specification](#function-specification)
-		- [Stake](#stake)
-		- [Increase Stake](#increase-stake)
-		- [Decrease Stake](#decrease-stake)
-		- [Register](#register)
-		- [Bond](#bond)
-		- [Unbond](#unbond)
-		- [Kick](#kick)
-		- [Slash](#slash)
-		- [Unstake](#unstake)
-		- [Withdraw](#withdraw)
-		- [Query Restaking](#query-restaking)
+    - [Terminology](#terminology)
+    - [Function specification](#function-specification)
+        - [Stake](#stake)
+        - [Increase Stake](#increase-stake)
+        - [Decrease Stake](#decrease-stake)
+        - [Register](#register)
+        - [Bond](#bond)
+        - [Unbond](#unbond)
+        - [Kick](#kick)
+        - [Slash](#slash)
+        - [Unstake](#unstake)
+        - [Withdraw](#withdraw)
+        - [Query Restaking](#query-restaking)
+    - [DataStruct and Interfaces](#dataStruct-and-interfaces)
 
 ## Terminology
 
@@ -47,38 +48,53 @@ Contents:
 
 ### Stake
 
-The `stake` operation requires specifying an account that implements the `staking pool` interface. Users will stake attached NEAR tokens to this account and record it internally in the `staking-base` contract.
+The `stake` operation requires specifying an account which is sub-account of near `staking-pool-factory` account. Users will stake attached NEAR tokens to this account and record it internally in the `staking-base` contract.
 
-Users can only choose one `staking pool` for `staking` at a time. If they want to switch to another `staking pool`, they need to complete an `unstake` operation first.
+Users can only choose one `staking pool` for `staking` at same time. If they want to switch to another `staking pool`, they need to complete an `unstake` operation first.
 
 ![](images/stake.png)
 
 ### Increase Stake
 
-Increase the `staker`  balance after the `stake` operation has been completed.
+The `Staker` can increase their `staking` amount after the `stake` operation has been completed.
 ![](images/increase_stake.png)
 
 ### Decrease Stake
 
-The `Staker` can reduce their `stake` amount, but it cannot be less than the minimum value specified by any `consumer chain` they are currently `bonding` to.
+The `Staker` can reduce their `staking` amount after the `stake` operation has been completed. The `CC Pos` can't stop `Staker` decreasing their stake amount, but the `CC Pos` can only select `Stakers` with staking balances ranked within a certain range.
 
 ![](images/decrease_stake.png)
 
 ### Register
 
-This interface allows a `consumer chain` to submit registration information to the staking-base contract. The following information needs to be provided: `energy_cost `, `unbond_period `, `minimum_bond_amount `, `website `, `governance `, and `slash_beneficiary_account`. Additionally, a certain amount of NEAR tokens needs to be attached as the registration fee during the registration process.
-
-There will also be another interface `update_consumer_chain_info` that allows the `consumer chain` to update their information (excluding `governance `) and this interface must be called by the `governance` account.
+This `consumer chain` can submit registration information to the staking-base contract. The following information needs to be provided: `chain_id`, `energy_cost `, `unbond_period `, `website `, `governance `, and `treasury`. Additionally, a certain amount of NEAR tokens needs to be attached as the registration fee during the registration process.
 
 ![](images/register.png)
 
+### Update CC Info
+
+The `CC Gov` can update `CC Pos` information and this interface must be called by the `governance` account.
+
+![](images/update-info.png)
+
+### Unregister
+The `CC Gov` can unregister `CC Pos` and the `restaking-base` will transfer register fee to `treasury` account.
+
+![](images/unregister.png)
+
 ### Bond
 
-After the `staker` has completed the `stake` operation through this contract, they can execute the `bond` operation, which will restake their staked NEAR to a specific `consumer chain` to provide security for the `consumer chain` PoS operation and to receive rewards or `slash` from the `consumer chain`.
-
+After the `Staker` has completed the `stake` operation through this contract, they can execute the `bond` operation, which will restake their staked NEAR to a specific `consumer chain` to provide security for the `consumer chain` PoS operation and to receive rewards or `slash` from the `consumer chain`.
+The `Staker` need to submit his staking information and identity when bonding.
 And Consumer Chain PoS accepts or rejects a bond request according to its rules, such as \$NEAR > Th, NFT ownership, etc. Restaking energy is here to restrain over-leverage risk. Each staker has a certain amount of energy, and he loses energy after bonding. Energy cost is determined by the consumer chain.
 
 ![](images/bond.png)
+
+### Change Identity
+
+The `Staker` can change his identity after finish bonding. 
+
+![](images/change_identity.png)
 
 ### Unbond
 
@@ -90,39 +106,49 @@ Once `unbond` is finished, the `staker` will recover energy.
 
 ![](images/unbond.png)
 
-### Kick
+### Blacklist
 
-The `Kick` has the same result as the `Unbond`, but it is called by `Consumer Chain Pos`.
+The CC Pos can blacklist Stakers, which will prevent them from bonding.
 
-![](images/kick.png)
+![](images/blacklist.png)
 
 ### Slash
 
-`Slash` is a penalty operation that is initiated by the `Consumer Chain Pos` to punish a `staker` for misconduct. The process is divided into two steps: first, the `Consumer Chain Pos`  submits a `slash` to the `staking-base` contract, and then `governance` decides whether to execute the `slash`.
+`Slash` is a penalty operation that is initiated by the `Consumer Chain Pos` to punish a `staker` for misconduct. 
+
+The process is divided into two steps: first, the `Consumer Chain Pos`  submits a `slash` to the `staking-base` contract, and then `governance` decides whether to execute the `slash`.
 
 Rules of executing slash:
 
 1. It will slash on the asset in `Staker.pending_unstakes` with the smallest `unlock_time` first.
 2. If the assets in `Staker.pending_unstakes` are not sufficient for the `slash` amount, the `unstake` operation is executed first, and `Staker.pending_unstakes` is updated before continuing with the `slash` operation.
 3. If the assets are still not enough after the `unstake` operation, it is still considered a successful `slash`, and the total amount successfully `slashed` is returned.
-4. After the assets in `Staker.pending_unstakes` are `slashed`, a `PendingUnstake` is created for the `CC Pos`'s `slash_beneficiary_account` that was specified during registration. The `PendingUnstake.unlock_epoch` field inherits the `unlock_epoch` of the `PendingUnstake` that was `slashed`, and `PendingUnstake.unlock_time` is set to 0.
+4. After the assets in `Staker.pending_unstakes` are `slashed`, a `PendingUnstake` is created for the `CC Pos`'s `treasury` that was specified during registration. The `PendingUnstake.unlock_epoch` field inherits the `unlock_epoch` of the `PendingUnstake` that was `slashed`, and `PendingUnstake.unlock_time` is set to current_time.
 
 ![](images/submit_slash.png)
 ![](images/do_slash.png)
 
+### Query Restaking
+
+In order to update validator set, the `CC Pos` is motivated to query the Restaking Base contract periodically.
+
+The `CC Pos` can specify a `limit` parameter to indicate that it only selects a certain number of Stakers ranked by staking amount. And the CC Pos will still perform an additional filtering based on the Stakers' staking amount to determine if they will become their validator.
+
+![](images/query_restaking.png)
+
 ### Unstake
 
-When a `Staker` performs the `unstake` operation, they must first `Unbond` all `consumer chain` PoS they are currently `Bond` to.
+When a `Staker` performs the `unstake` operation, they must first `Unbond` all `consumer chain` PoS they are currently bonding.
 
-The withdrawable time after `Unstake`depends on the longest `Unbonding period` among all bonding `Consumer Chain Pos`.
+The withdrawable time after `Unstake`depends on the longest `Unbonding period` among all bonding `CC Pos`.
 ![](images/unstake.png)
 
 ### Withdraw
 
-The `Staker` can withdraw their `unstaked_balance` in the contract.
+When a Staker performs the unstake or decrease stake operation, the contract will generate PendingUnstake data as a withdrawal voucher. When the Staker comes to withdraw, they need to specify the list of PendingUnstake IDs. The `restaking-base contract` will destroy the Withdrawable PendingUnstake and transfer the corresponding NEAR to the Staker.
+
 ![](images/withdraw.png)
 
-### Query Restaking
 
-In order to update validator set, the consumer chain is motivated to query the Restaking Base contract periodically.
-![](images/query_restaking.png)
+## DataStruct and Interfaces
+![](images/datastructs_and_interfaces.png)
