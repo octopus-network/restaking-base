@@ -6,19 +6,23 @@ Contents:
 
 - [Restaking Base](#restaking-base)
     - [Terminology](#terminology)
+    - [Use Case](#use-case)
     - [Function specification](#function-specification)
         - [Stake](#stake)
         - [Increase Stake](#increase-stake)
         - [Decrease Stake](#decrease-stake)
         - [Register](#register)
+        - [Unregister](#unregister)
+        - [Update CC Info](#update-cc-info)
         - [Bond](#bond)
+        - [ChangeID](#change-id)
         - [Unbond](#unbond)
-        - [Kick](#kick)
+        - [Blackout](#blackout)
         - [Slash](#slash)
+        - [Query Pos Info](#query-pos-info)
         - [Unstake](#unstake)
         - [Withdraw](#withdraw)
-        - [Query Restaking](#query-restaking)
-    - [DataStruct and Interfaces](#dataStruct-and-interfaces)
+    - [DataStruct and Interfaces](#datastruct-and-interfaces)
 
 ## Terminology
 
@@ -43,6 +47,9 @@ Contents:
 - `energy`: `energy` is a concept proposed to suppress the risk of over-leveraging. Each `Staker` has 100 energy points, and each `Consumer Chain` has `energy_cost`. `Staker` will consume `energy` when they `Bond` to `CC Pos`, and recover `energy` when they `Unbond` from `CC Pos`.
 - `Bond`: After the `Staker` and `Consumer Chain` bond, the `Staker's` near provides security for the `Consumer Chain`, and the `Consumer Chain` provides `Rewards` to the `Staker`. At the same time, the `Consumer Chain` will have the right to initiate a `slash` against the `Staker`.
 - `Unbond`: The `Staker` and `Consumer Chain` break the `Bond`. This process requires an `unbonding period` to complete, during which the `Consumer Chain` can apply to `Slash` the `Staker`.
+
+## Use case
+![](images/use-case.jpg)
 
 ## Function specification
 
@@ -71,16 +78,16 @@ This `consumer chain` can submit registration information to the staking-base co
 
 ![](images/register.png)
 
+### Unregister
+The `CC Gov` can unregister `CC Pos` and the `restaking-base` will transfer register fee to `treasury` account.
+
+![](images/unregister.png)
+
 ### Update CC Info
 
 The `CC Gov` can update `CC Pos` information and this interface must be called by the `governance` account.
 
 ![](images/update-info.png)
-
-### Unregister
-The `CC Gov` can unregister `CC Pos` and the `restaking-base` will transfer register fee to `treasury` account.
-
-![](images/unregister.png)
 
 ### Bond
 
@@ -90,7 +97,7 @@ And Consumer Chain PoS accepts or rejects a bond request according to its rules,
 
 ![](images/bond.png)
 
-### Change Identity
+### Change ID
 
 The `Staker` can change his identity after finish bonding. 
 
@@ -106,9 +113,9 @@ Once `unbond` is finished, the `staker` will recover energy.
 
 ![](images/unbond.png)
 
-### Blacklist
+### Blackout
 
-The CC Pos can blacklist Stakers, which will prevent them from bonding.
+The CC Pos can black out Stakers, which will prevent them from bonding.
 
 ![](images/blacklist.png)
 
@@ -128,7 +135,7 @@ Rules of executing slash:
 ![](images/submit_slash.png)
 ![](images/do_slash.png)
 
-### Query Restaking
+### Query Pos Info
 
 In order to update validator set, the `CC Pos` is motivated to query the Restaking Base contract periodically.
 
@@ -152,3 +159,4 @@ When a Staker performs the unstake or decrease stake operation, the contract wil
 
 ## DataStruct and Interfaces
 ![](images/datastructs_and_interfaces.png)
+![](images/cc-anchor.png)
