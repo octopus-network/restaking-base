@@ -19,7 +19,7 @@ Contents:
         - [Unbond](#unbond)
         - [Blackout](#blackout)
         - [Slash](#slash)
-        - [Query Pos Info](#query-pos-info)
+        - [Query VS](#query-vs)
         - [Unstake](#unstake)
         - [Withdraw](#withdraw)
     - [DataStruct and Interfaces](#datastruct-and-interfaces)
@@ -135,13 +135,13 @@ Rules of executing slash:
 ![](images/submit_slash.png)
 ![](images/do_slash.png)
 
-### Query Pos Info
+### Query VS
 
 In order to update validator set, the `CC Pos` is motivated to query the Restaking Base contract periodically.
 
 The `CC Pos` can specify a `limit` parameter to indicate that it only selects a certain number of Stakers ranked by staking amount. And the CC Pos will still perform an additional filtering based on the Stakers' staking amount to determine if they will become their validator.
 
-![](images/query_restaking.png)
+![](images/queryVS.png)
 
 ### Unstake
 
