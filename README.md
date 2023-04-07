@@ -40,11 +40,10 @@ Contents:
 - `staked balance`: The staking amount of `staker`.
 - `owner`: The owner account specified by the Staking Pool contract.
 - `Staking Reward fee`: The fee charged by the `Restaking Base` contract for the `Staker's` `Staking Reward`. It will be collected by issuing shares to the specified `staking_reward_beneficiary_account`.
-- `Consumer Chain`: A Consumer Chain establishes its PoS contract on NEAR to execute its `reward` and `slash` rules and then registers its `unbonding period`, `energy cost`, `CC Gov`, and other parameters with the `Restaking Base` contract.
+- `Consumer Chain`: A Consumer Chain establishes its PoS contract on NEAR to execute its `reward` and `slash` rules and then registers its `unbonding period`, `CC Gov`, and other parameters with the `Restaking Base` contract.
 - `CC Pos`: A Pos contract established by a Consumer Chain on near.
 - `CC Gov`: An account specified when registering the `CC Pos`, which has the authority to approve or reject the `slash` submitted by the `CC Pos`.
 - `Slash`: A Consumer Chain can apply to penalize the `Staker` during the `bonding` or `unbonding` period, and `CC Gov` decides whether to approve or reject the `Slash`.
-- `energy`: `energy` is a concept proposed to suppress the risk of over-leveraging. Each `Staker` has 100 energy points, and each `Consumer Chain` has `energy_cost`. `Staker` will consume `energy` when they `Bond` to `CC Pos`, and recover `energy` when they `Unbond` from `CC Pos`.
 - `Bond`: After the `Staker` and `Consumer Chain` bond, the `Staker's` near provides security for the `Consumer Chain`, and the `Consumer Chain` provides `Rewards` to the `Staker`. At the same time, the `Consumer Chain` will have the right to initiate a `slash` against the `Staker`.
 - `Unbond`: The `Staker` and `Consumer Chain` break the `Bond`. This process requires an `unbonding period` to complete, during which the `Consumer Chain` can apply to `Slash` the `Staker`.
 
@@ -74,7 +73,7 @@ The `Staker` can reduce their `staking` amount after the `stake` operation has b
 
 ### Register
 
-This `consumer chain` can submit registration information to the staking-base contract. The following information needs to be provided: `chain_id`, `energy_cost `, `unbond_period `, `website `, `governance `, and `treasury`. Additionally, a certain amount of NEAR tokens needs to be attached as the registration fee during the registration process.
+This `consumer chain` can submit registration information to the staking-base contract. The following information needs to be provided: `chain_id`, `unbond_period `, `website `, `governance `, and `treasury`. Additionally, a certain amount of NEAR tokens needs to be attached as the registration fee during the registration process.
 
 ![](images/register.png)
 
@@ -93,7 +92,7 @@ The `CC Gov` can update `CC Pos` information and this interface must be called b
 
 After the `Staker` has completed the `stake` operation through this contract, they can execute the `bond` operation, which will restake their staked NEAR to a specific `consumer chain` to provide security for the `consumer chain` PoS operation and to receive rewards or `slash` from the `consumer chain`.
 The `Staker` need to submit his staking information and identity when bonding.
-And Consumer Chain PoS accepts or rejects a bond request according to its rules, such as \$NEAR > Th, NFT ownership, etc. Restaking energy is here to restrain over-leverage risk. Each staker has a certain amount of energy, and he loses energy after bonding. Energy cost is determined by the consumer chain.
+And Consumer Chain PoS accepts or rejects a bond request according to its rules, such as \$NEAR > Th, NFT ownership, etc.
 
 ![](images/bond.png)
 
@@ -109,15 +108,13 @@ The `staker` can call the `unbond` operation to exit the `Consumer Chain Pos`, w
 
 And once unbonded, the staker can’t bond to the consumer chain until the unbonding period expired.
 
-Once `unbond` is finished, the `staker` will recover energy.
-
 ![](images/unbond.png)
 
 ### Blackout
 
 The CC Pos can black out Stakers, which will prevent them from bonding.
 
-![](images/blacklist.png)
+![](images/blackout.png)
 
 ### Slash
 
@@ -156,7 +153,6 @@ When a Staker performs the unstake or decrease stake operation, the contract wil
 
 ![](images/withdraw.png)
 
-
 ## DataStruct and Interfaces
-![](images/datastructs_and_interfaces.png)
+![](images/datastruct_and_interfaces.png)
 ![](images/cc-anchor.png)
