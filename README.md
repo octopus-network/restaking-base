@@ -1,6 +1,6 @@
 # Restaking Base
 
-This contract aims to provide two main functionalities. The first one is to proxy the user's stake execution, and the second one is to enable the restaking of NEAR tokens that have been staked through this contract. This contract aims to provide two main functionalities. The first one is to proxy the user's stake execution, and the second one is to enable the restaking of NEAR tokens that have been staked through this contract.
+`Restaking Base` is a near contract designed to restake NEAR tokens for `CC PoS` (Consumer Chain PoS). There are several user roles when interacting with the contract, including `Staker`, `CC PoS`, and `CC Gov` (Consumer Chain Governance). `Stakers` can stake their NEAR tokens through the contract, transfer their staking management rights, and gain the right to restake to `CC PoS` to provide security, receive rewards from `CC PoS`, and also bear the risk of being slashed. `CC Gov` is responsible for managing `CC PoS` and deciding whether to execute slashes submitted by `CC PoS`.
 
 Contents:
 
