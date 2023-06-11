@@ -1,6 +1,8 @@
 [workspace]
 members = [
-    "contracts/restaking-base-contract",
+    "contracts/restaking-base",
+    "contracts/test-token",
+    "contracts/mock-consumer-chain-pos"
 ]
 
 [profile.release]
