@@ -21,3 +21,24 @@ pub fn assert_result_success(result: &ExecutionFinalResult, msg: &str) {
         result
     )
 }
+
+pub struct ExecutionFinalResultHandle<'a> {
+    pub result: &'a ExecutionFinalResult,
+}
+
+impl<'a> ExecutionFinalResultHandle<'a> {
+    pub fn assert_result_success(&self, msg: &str) {
+        assert!(
+            self.result.is_success(),
+            "{}. Result Detail is: {:?}",
+            msg,
+            self.result
+        )
+    }
+}
+
+impl<'a> From<&'a ExecutionFinalResult> for ExecutionFinalResultHandle<'a> {
+    fn from(value: &'a ExecutionFinalResult) -> Self {
+        Self { result: value }
+    }
+}

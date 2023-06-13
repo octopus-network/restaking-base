@@ -10,4 +10,4 @@ pub const RESTAKING_BASE_WASM_BYTES: &[u8] =
     include_bytes!("../../../../res/restaking_base_contract.wasm");
 
 pub const CC_REGISTER_FEE: Balance = parse_near!("10 near");
-pub const SLASH_GUARANTEE: Balance = parse_near!("10 near");
+pub const SLASH_GUARANTEE: Balance = parse_near!("1 near");

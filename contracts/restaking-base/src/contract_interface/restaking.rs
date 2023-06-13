@@ -1,4 +1,7 @@
-use crate::types::{SlashId, ValidaotrSet};
+use crate::{
+    models::consumer_chain::ConsumerChainView,
+    types::{SlashId, ValidaotrSet},
+};
 
 use super::*;
 
@@ -21,7 +24,7 @@ pub trait ConsumerChainAction {
     fn slash_request(
         &mut self,
         consumer_chain_id: ConsumerChainId,
-        slash_items: Vec<(AccountId, Balance)>,
+        slash_items: Vec<(AccountId, U128)>,
         evidence_sha256_hash: String,
     ) -> SlashId;
 }
@@ -46,5 +49,9 @@ pub trait ReStakingCallBack {
 }
 
 pub trait ReStakingView {
+    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainView>;
     fn get_validator_set(&self, consumer_chain_id: ConsumerChainId, limit: u32) -> ValidaotrSet;
+    fn get_slash_guarantee(&self) -> U128;
+    fn get_cc_register_fee(&self) -> U128;
+    fn get_owner(&self) -> AccountId;
 }
