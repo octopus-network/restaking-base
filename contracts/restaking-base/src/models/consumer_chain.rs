@@ -1,18 +1,18 @@
-use crate::types::{ConsumerChainId, DurationInSeconds};
+use crate::types::{ConsumerChainId, DurationOfSeconds};
 use crate::*;
 use near_sdk::AccountId;
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub enum ConsumerChainStatus {
-    Running,
-    Unregistered,
+    Active,
+    Deregistered,
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct ConsumerChain {
     pub consumer_chain_id: ConsumerChainId,
-    pub unbond_period: DurationInSeconds,
+    pub unbond_period: DurationOfSeconds,
     pub website: String,
     pub governance: AccountId,
     // todo need a more suitable datastruct
@@ -21,6 +21,7 @@ pub struct ConsumerChain {
     pub status: ConsumerChainStatus,
     pub pos_account_id: AccountId,
     pub blacklist: UnorderedSet<AccountId>,
+    pub register_fee: Balance,
 }
 
 impl ConsumerChain {
@@ -46,6 +47,7 @@ impl ConsumerChain {
     pub fn new_from_register_param(
         register_param: ConsumerChainRegisterParam,
         governance: AccountId,
+        register_fee: Balance,
     ) -> Self {
         Self {
             consumer_chain_id: register_param.consumer_chain_id.clone(),
@@ -57,11 +59,12 @@ impl ConsumerChain {
             }),
             treasury: register_param.treasury,
             // todo
-            status: ConsumerChainStatus::Running,
+            status: ConsumerChainStatus::Active,
             pos_account_id: register_param.cc_pos_account,
             blacklist: UnorderedSet::new(StorageKey::ConsumerChainBlackList {
                 consumer_chain_id: register_param.consumer_chain_id.clone(),
             }),
+            register_fee: register_fee,
         }
     }
 
@@ -83,16 +86,22 @@ impl ConsumerChain {
         }
     }
 
-    pub fn assert_running(&self) {
+    pub fn assert_chain_active(&self) {
         assert!(
-            matches!(self.status, ConsumerChainStatus::Running),
+            matches!(self.status, ConsumerChainStatus::Active),
             "The consumer chain({}) is not running.",
             self.consumer_chain_id
         );
     }
 
     pub fn bond(&mut self, staker_id: &StakerId) {
-        self.assert_running();
+        self.assert_chain_active();
+        assert!(
+            !self.blacklist.contains(&staker_id),
+            "Failed to bond, {} has been blacklisted by {}",
+            staker_id,
+            self.consumer_chain_id
+        );
         self.bonding_stakers.insert(staker_id);
     }
 
@@ -140,7 +149,7 @@ impl RestakingBaseContract {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ConsumerChainUpdateParam {
-    pub unbond_period: Option<DurationInSeconds>,
+    pub unbond_period: Option<DurationOfSeconds>,
     pub website: Option<String>,
     pub treasury: Option<AccountId>,
     pub governance: Option<AccountId>,
@@ -151,23 +160,24 @@ pub struct ConsumerChainUpdateParam {
 pub struct ConsumerChainRegisterParam {
     pub consumer_chain_id: ConsumerChainId,
     pub cc_pos_account: AccountId,
-    pub unbond_period: DurationInSeconds,
+    pub unbond_period: DurationOfSeconds,
     pub website: String,
     pub treasury: AccountId,
     // pub goverannce: AccountId
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ConsumerChainView {
     pub consumer_chain_id: ConsumerChainId,
-    pub unbond_period: DurationInSeconds,
+    pub unbond_period: DurationOfSeconds,
     pub website: String,
     pub governance: AccountId,
 
     pub treasury: AccountId,
     pub status: ConsumerChainStatus,
     pub pos_account_id: AccountId,
+    pub register_fee: U128,
 }
 
 impl From<ConsumerChain> for ConsumerChainView {
@@ -180,6 +190,7 @@ impl From<ConsumerChain> for ConsumerChainView {
             treasury: value.treasury,
             status: value.status,
             pos_account_id: value.pos_account_id,
+            register_fee: value.register_fee.into(),
         }
     }
 }

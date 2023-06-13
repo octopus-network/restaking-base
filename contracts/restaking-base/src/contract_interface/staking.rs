@@ -26,6 +26,8 @@ pub trait StakeView {
         skip: u32,
         limit: u32,
     ) -> Vec<ConsumerChainView>;
+
+    fn get_staking_pool(&self, pool_id: PoolId) -> StakingPool;
 }
 
 pub trait StakingCallBack {
@@ -62,7 +64,6 @@ pub trait StakingCallBack {
         &mut self,
         staker_id: AccountId,
         decrease_amount: Option<U128>,
-        staked_balance: U128,
     ) -> PromiseOrValue<Option<WithdrawalReceiptId>>;
 
     fn withdraw_callback(
@@ -71,5 +72,5 @@ pub trait StakingCallBack {
         withdrawal_certificates: Vec<WithdrawalReceiptId>,
     );
 
-    fn ping_callback(&mut self, staked_balance: U128);
+    fn ping_callback(&mut self, pool_id: PoolId, staked_balance: U128);
 }

@@ -1,11 +1,19 @@
 use crate::*;
 
+const fn _default_slash_guarantee() -> U128 {
+    U128(0)
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Slash {
     pub consumer_chain_id: ConsumerChainId,
-    pub slash_items: Vec<(AccountId, Balance)>,
+    pub slash_items: Vec<(AccountId, U128)>,
     pub evidence_sha256_hash: String,
+
+    #[serde(skip_deserializing)]
+    #[serde(default = "_default_slash_guarantee")]
+    pub slash_guarantee: U128,
 }
 
 impl RestakingBaseContract {

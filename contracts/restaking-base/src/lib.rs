@@ -18,11 +18,11 @@ use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::U128;
 use near_sdk::json_types::U64;
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::PromiseOrValue;
 use near_sdk::{
     assert_one_yocto, env, ext_contract, near_bindgen, AccountId, Balance, BorshStorageKey,
     PanicOnDefault, Promise, StorageUsage,
 };
+use near_sdk::{log, PromiseOrValue};
 use types::{ConsumerChainId, PoolId, SlashId, StakerId, WithdrawalReceiptId};
 
 #[derive(BorshStorageKey, BorshSerialize)]

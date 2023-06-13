@@ -5,7 +5,11 @@ use near_sdk::Balance;
 #[derive(BorshSerialize, BorshDeserialize, Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct StakingPool {
+    #[serde(default)]
+    #[serde(with = "u128_dec_format")]
     pub total_staked_shares: ShareBalance,
+    #[serde(default)]
+    #[serde(with = "u128_dec_format")]
     pub total_staked_balance: ShareBalance,
     // todo 是否需要一个这样的索引
     // pub shares: UnorderedMap<AccountId, ShareBalance>
@@ -25,10 +29,10 @@ impl StakingPool {
         &self,
         stake_amount: Balance,
     ) -> ShareBalance {
-        assert!(
-            self.total_staked_balance > 0,
-            "The total staked balance can't be 0"
-        );
+        if self.total_staked_balance == 0 {
+            return stake_amount;
+        }
+
         (U256::from(self.total_staked_shares) * U256::from(stake_amount)
             / U256::from(self.total_staked_balance))
         .as_u128()
@@ -54,10 +58,10 @@ impl StakingPool {
         &self,
         share_balance: ShareBalance,
     ) -> Balance {
-        assert!(
-            self.total_staked_shares > 0,
-            "The total number of stake shares can't be 0"
-        );
+        if self.total_staked_shares == 0 {
+            return share_balance;
+        }
+
         (U256::from(self.total_staked_balance) * U256::from(share_balance)
             / U256::from(self.total_staked_shares))
         .as_u128()

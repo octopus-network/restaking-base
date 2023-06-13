@@ -5,10 +5,12 @@ use std::ops::Mul;
 use super::restaking::*;
 use super::staking::*;
 use super::*;
+use crate::constants::gas_constants::TGAS_FOR_BOND_CALLBACK;
 use crate::constants::gas_constants::TGAS_FOR_CHANGE_KEY;
 use crate::constants::gas_constants::TGAS_FOR_GET_ACCOUNT_STAKED_BALANCE;
 use crate::constants::gas_constants::TGAS_FOR_UNSTAKE;
 use crate::models::consumer_chain::ConsumerChainStatus;
+use crate::models::consumer_chain::ConsumerChainView;
 use crate::types::ValidaotrSet;
 use crate::{
     external::consumer_chain_pos::ext_consumer_chain_pos,
@@ -37,7 +39,7 @@ impl ConsumerChainAction for RestakingBaseContract {
     fn slash_request(
         &mut self,
         consumer_chain_id: ConsumerChainId,
-        slash_items: Vec<(AccountId, Balance)>,
+        slash_items: Vec<(AccountId, U128)>,
         evidence_sha256_hash: String,
     ) -> SlashId {
         assert_eq!(
@@ -59,6 +61,7 @@ impl ConsumerChainAction for RestakingBaseContract {
                 consumer_chain_id,
                 slash_items,
                 evidence_sha256_hash,
+                slash_guarantee: self.slash_guarantee.into(),
             },
         );
         slash_id
@@ -89,8 +92,11 @@ impl GovernanceAction for RestakingBaseContract {
         // todo how to check chain id is legal
         // 按照ccv的规则来
 
-        let consumer_chain =
-            ConsumerChain::new_from_register_param(register_param, env::current_account_id());
+        let consumer_chain = ConsumerChain::new_from_register_param(
+            register_param,
+            env::predecessor_account_id(),
+            self.cc_register_fee,
+        );
 
         // needn't check storage, the register fee should able to cover storage.
 
@@ -105,7 +111,7 @@ impl GovernanceAction for RestakingBaseContract {
         assert_one_yocto();
         self.internal_use_consumer_chain_or_panic(&consumer_chain_id, |consumer_chain| {
             consumer_chain.assert_cc_gov();
-            consumer_chain.status = ConsumerChainStatus::Unregistered;
+            consumer_chain.status = ConsumerChainStatus::Deregistered;
         });
     }
 
@@ -157,8 +163,11 @@ impl GovernanceAction for RestakingBaseContract {
         if is_approve {
             // 3. loop and slash
             for slash_item in &slash.slash_items {
-                let actual_execution_receive_amount =
-                    self.internal_slash(&slash_item.0, slash_item.1, &consumer_chain.governance);
+                self.internal_slash(
+                    &slash_item.0,
+                    slash_item.1.into(),
+                    &consumer_chain.governance,
+                );
                 // todo log
             }
         }
@@ -177,14 +186,31 @@ impl StakerRestakingAction for RestakingBaseContract {
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
 
-        self.internal_bond(&mut staker, &mut consumer_chain);
+        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker.staker_id);
+
+        storage_manager.execute_in_storage_monitoring(|| {
+            staker.bond(
+                &consumer_chain.consumer_chain_id,
+                consumer_chain.unbond_period,
+            );
+            consumer_chain.bond(&staker.staker_id);
+            self.internal_save_staker(&staker_id, &staker);
+            self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
+        });
+
+        // self.internal_bond(&mut staker, &mut consumer_chain);
 
         self.ping(Option::None)
             .then(
                 ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
+                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_CHANGE_KEY))
                     .bond(staker_id.clone(), key),
             )
-            .then(Self::ext(env::current_account_id()).bond_callback(consumer_chain_id, staker_id))
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_BOND_CALLBACK))
+                    .bond_callback(consumer_chain_id, staker_id),
+            )
             .into()
     }
 
@@ -200,7 +226,10 @@ impl StakerRestakingAction for RestakingBaseContract {
         let staker = self.internal_get_staker_or_panic(&env::predecessor_account_id());
         let consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
         assert!(
-            staker.bonding_consumer_chains.contains(&consumer_chain_id),
+            staker
+                .bonding_consumer_chains
+                .get(&consumer_chain_id)
+                .is_some(),
             "Failed change_key, staker({}) didn't bond in consumer_chain({})",
             staker.staker_id,
             consumer_chain_id
@@ -216,7 +245,9 @@ impl StakerRestakingAction for RestakingBaseContract {
     fn unbond(&mut self, consumer_chain_id: ConsumerChainId) -> PromiseOrValue<bool> {
         assert_one_yocto();
         let staker_id = env::predecessor_account_id();
-        self.internal_unbond(&staker_id, &consumer_chain_id);
+        let mut staker = self.internal_get_staker_or_panic(&staker_id);
+        let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
+        self.internal_unbond(&mut staker, &mut consumer_chain);
         PromiseOrValue::Value(true)
     }
 }
@@ -243,6 +274,12 @@ impl ReStakingCallBack for RestakingBaseContract {
 
 #[near_bindgen]
 impl ReStakingView for RestakingBaseContract {
+    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainView> {
+        self.consumer_chains
+            .get(&consumer_chain_id)
+            .map(ConsumerChainView::from)
+    }
+
     fn get_validator_set(&self, consumer_chain_id: ConsumerChainId, limit: u32) -> ValidaotrSet {
         let consumer_chains = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
 
@@ -258,6 +295,18 @@ impl ReStakingView for RestakingBaseContract {
             .sorted_by(|a, b| b.1.cmp(&a.1))
             .take(limit as usize)
             .collect_vec()
+    }
+
+    fn get_slash_guarantee(&self) -> U128 {
+        self.slash_guarantee.into()
+    }
+
+    fn get_cc_register_fee(&self) -> U128 {
+        self.cc_register_fee.into()
+    }
+
+    fn get_owner(&self) -> AccountId {
+        self.owner.clone()
     }
 }
 
@@ -337,8 +386,6 @@ impl RestakingBaseContract {
         let (decrease_shares, receive_amount) =
             self.internal_decrease_stake(&slash_staker_id, actul_slash_amount);
 
-        // todo check storage for call successful
-
         ext_staking_pool::ext(pool_id)
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE))
             .with_attached_deposit(ONE_YOCTO)
@@ -364,36 +411,6 @@ impl RestakingBaseContract {
         actul_slash_amount
     }
 
-    pub(crate) fn internal_bond(
-        &mut self,
-        staker: &mut Staker,
-        consumer_chain: &mut ConsumerChain,
-    ) {
-        // 1. check black list
-
-        assert!(
-            !consumer_chain.blacklist.contains(&staker.staker_id),
-            "Failed to bond, {} has been blacklisted by {}",
-            staker.staker_id,
-            consumer_chain.consumer_chain_id
-        );
-        let mut staker = self.internal_get_staker_or_panic(&staker.staker_id);
-
-        // let mut account = self.internal_get_account_or_panic(&staker.staker_id);
-
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker.staker_id);
-
-        storage_manager.execute_in_storage_monitoring(|| {
-            self.internal_use_staker_or_panic(&staker.staker_id, |staker| {
-                staker.bond(&consumer_chain.consumer_chain_id)
-            });
-            consumer_chain.bond(&staker.staker_id);
-            staker.bond(&consumer_chain.consumer_chain_id);
-        });
-
-        self.internal_save_storage_manager(&staker.staker_id, &storage_manager);
-    }
-
     pub(crate) fn internal_rollback_bond(
         &mut self,
         staker: &mut Staker,
@@ -409,21 +426,18 @@ impl RestakingBaseContract {
 
     pub(crate) fn internal_unbond(
         &mut self,
-        staker_id: &StakerId,
-        consumer_chain_id: &ConsumerChainId,
+        staker: &mut Staker,
+        consumer_chain: &mut ConsumerChain,
     ) {
-        let mut consumer_chain = self.internal_get_consumer_chain_or_panic(consumer_chain_id);
-        let mut staker = self.internal_get_staker_or_panic(staker_id);
+        // let mut consumer_chain = self.internal_get_consumer_chain_or_panic(consumer_chain_id);
+        // let mut staker = self.internal_get_staker_or_panic(staker_id);
 
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(staker_id);
-        storage_manager.execute_in_storage_monitoring(|| {
-            consumer_chain.unbond(staker_id);
-            staker.unbond(consumer_chain_id);
-            staker.unbonding_unlock_time = max(
-                staker.unbonding_unlock_time,
-                env::block_timestamp() + consumer_chain.unbond_period.0,
-            )
-        });
-        self.internal_save_storage_manager(staker_id, &storage_manager);
+        // let mut storage_manager = self.internal_get_storage_manager_or_panic(staker_id);
+        consumer_chain.unbond(&staker.staker_id);
+        staker.unbond(&consumer_chain.consumer_chain_id);
+        // storage_manager.execute_in_storage_monitoring(|| {
+
+        // });
+        // self.internal_save_storage_manager(staker_id, &storage_manager);
     }
 }
