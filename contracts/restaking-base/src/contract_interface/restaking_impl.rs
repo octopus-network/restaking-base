@@ -89,8 +89,7 @@ impl GovernanceAction for RestakingBaseContract {
             register_param.consumer_chain_id
         );
 
-        // todo how to check chain id is legal
-        // 按照ccv的规则来
+        validate_chain_id(&register_param.consumer_chain_id);
 
         let consumer_chain = ConsumerChain::new_from_register_param(
             register_param,
@@ -219,7 +218,7 @@ impl StakerRestakingAction for RestakingBaseContract {
         &mut self,
         consumer_chain_id: ConsumerChainId,
         new_key: String,
-    ) -> PromiseOrValue<bool> {
+    ) -> Promise {
         assert_one_yocto();
 
         // 1. check if bonding
@@ -238,7 +237,6 @@ impl StakerRestakingAction for RestakingBaseContract {
         ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_CHANGE_KEY))
             .change_key(staker.staker_id, new_key)
-            .into()
     }
 
     #[payable]
@@ -247,7 +245,13 @@ impl StakerRestakingAction for RestakingBaseContract {
         let staker_id = env::predecessor_account_id();
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
-        self.internal_unbond(&mut staker, &mut consumer_chain);
+
+        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker_id);
+        storage_manager.execute_in_storage_monitoring(|| {
+            consumer_chain.unbond(&staker.staker_id);
+            staker.unbond(&consumer_chain.consumer_chain_id);
+        });
+        self.internal_save_storage_manager(&staker_id, &storage_manager);
         PromiseOrValue::Value(true)
     }
 }
@@ -292,8 +296,6 @@ impl ReStakingView for RestakingBaseContract {
                     U128(self.get_staker_staked_balance(&staker_id)),
                 )
             })
-            .sorted_by(|a, b| b.1.cmp(&a.1))
-            .take(limit as usize)
             .collect_vec()
     }
 
@@ -356,8 +358,8 @@ impl RestakingBaseContract {
             }
             let new_pending_withdrawal = pending_withdrawal.slash(
                 self.next_uuid().into(),
-                governance.clone(),
                 max(pending_withdrawal.amount, slah_amount - acc_slash_amount),
+                governance.clone(),
             );
 
             governance_account.pending_withdrawals.insert(
@@ -405,7 +407,8 @@ impl RestakingBaseContract {
                         slash_staker_id.clone(),
                         decrease_shares.into(),
                         receive_amount.into(),
-                        Some(governance.clone()),
+                        governance.clone(),
+                        Some(governance.clone())
                     ),
             );
         actul_slash_amount
@@ -422,22 +425,5 @@ impl RestakingBaseContract {
             staker.unbond(&consumer_chain.consumer_chain_id);
         });
         self.internal_save_storage_manager(&staker.staker_id, &storage_manager);
-    }
-
-    pub(crate) fn internal_unbond(
-        &mut self,
-        staker: &mut Staker,
-        consumer_chain: &mut ConsumerChain,
-    ) {
-        // let mut consumer_chain = self.internal_get_consumer_chain_or_panic(consumer_chain_id);
-        // let mut staker = self.internal_get_staker_or_panic(staker_id);
-
-        // let mut storage_manager = self.internal_get_storage_manager_or_panic(staker_id);
-        consumer_chain.unbond(&staker.staker_id);
-        staker.unbond(&consumer_chain.consumer_chain_id);
-        // storage_manager.execute_in_storage_monitoring(|| {
-
-        // });
-        // self.internal_save_storage_manager(staker_id, &storage_manager);
     }
 }

@@ -11,6 +11,7 @@ use crate::utils::*;
 use models::account::Account;
 use models::pending_withdrawal::PendingWithdrawal;
 use models::slash::Slash;
+use models::staker::StakingChangeResult;
 use models::staking_pool::StakingPool;
 use models::storage_manager::StorageManager;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -23,27 +24,14 @@ use near_sdk::{
     PanicOnDefault, Promise, StorageUsage,
 };
 use near_sdk::{log, PromiseOrValue};
-use types::{ConsumerChainId, PoolId, SlashId, StakerId, WithdrawalReceiptId};
-
-#[derive(BorshStorageKey, BorshSerialize)]
-pub(crate) enum StorageKey {
-    Stakers,
-    StakerBondingConsumerChains { staker_id: StakerId },
-    ConsumerChainBondingStakers { consumer_chain_id: ConsumerChainId },
-    StakingPools,
-    ConsumerChains,
-    ConsumerChainBlackList { consumer_chain_id: ConsumerChainId },
-    Slashes,
-    Accounts,
-    PendingWithdrawals { account_id: AccountId },
-    StorageManagers,
-}
+use types::{ConsumerChainId, PoolId, SlashId, StakerId, WithdrawalCertificatetId};
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct RestakingBaseContract {
     pub owner: AccountId,
     pub uuid: u64,
+    pub sequence: u64,
     pub stakers: LookupMap<AccountId, Staker>,
     // todo 如果一个pool从白名单移除， 需要处理
     pub staking_pools: LookupMap<PoolId, StakingPool>,
@@ -68,6 +56,7 @@ impl RestakingBaseContract {
         Self {
             owner,
             uuid: 0,
+            sequence: 0,
             stakers: LookupMap::new(StorageKey::Stakers),
             staking_pools: LookupMap::new(StorageKey::StakingPools),
             consumer_chains: UnorderedMap::new(StorageKey::ConsumerChains),
@@ -89,4 +78,23 @@ impl RestakingBaseContract {
         self.uuid += 1;
         self.uuid
     }
+
+    pub(crate) fn next_sequence(&mut self) -> u64 {
+        self.sequence += 1;
+        self.sequence
+    }
+}
+
+#[derive(BorshStorageKey, BorshSerialize)]
+pub(crate) enum StorageKey {
+    Stakers,
+    StakerBondingConsumerChains { staker_id: StakerId },
+    ConsumerChainBondingStakers { consumer_chain_id: ConsumerChainId },
+    StakingPools,
+    ConsumerChains,
+    ConsumerChainBlackList { consumer_chain_id: ConsumerChainId },
+    Slashes,
+    Accounts,
+    PendingWithdrawals { account_id: AccountId },
+    StorageManagers,
 }

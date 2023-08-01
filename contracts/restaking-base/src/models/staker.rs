@@ -1,6 +1,6 @@
 use std::cmp::max;
 
-use crate::types::{DurationOfSeconds, PoolId, ShareBalance};
+use crate::types::{DurationOfSeconds, PoolId, ShareBalance, Sequence};
 use crate::*;
 use near_sdk::{collections::UnorderedSet, Timestamp};
 
@@ -38,6 +38,8 @@ impl Staker {
             self.unbonding_unlock_time,
             env::block_timestamp()
         );
+
+        self.max_bonding_unlock_period = max(self.max_bonding_unlock_period, unbond_period);
         self.bonding_consumer_chains
             .insert(consumer_chain_id, &unbond_period);
     }
@@ -109,4 +111,11 @@ impl From<Staker> for StakerView {
             unbonding_unlock_time: value.unbonding_unlock_time.into(),
         }
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct StakingChangeResult {
+    pub sequence: Sequence,
+    pub new_total_staked_balance: U128,
 }

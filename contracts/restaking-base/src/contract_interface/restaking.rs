@@ -30,12 +30,12 @@ pub trait ConsumerChainAction {
 }
 
 pub trait StakerRestakingAction {
-    fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool>;
     fn change_key(
         &mut self,
         consumer_chain_id: ConsumerChainId,
         new_key: String,
-    ) -> PromiseOrValue<bool>;
+    ) -> Promise;
+    fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool>;
     fn unbond(&mut self, consumer_chain_id: ConsumerChainId) -> PromiseOrValue<bool>;
 }
 

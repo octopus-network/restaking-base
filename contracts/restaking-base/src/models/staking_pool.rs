@@ -10,7 +10,7 @@ pub struct StakingPool {
     pub total_staked_shares: ShareBalance,
     #[serde(default)]
     #[serde(with = "u128_dec_format")]
-    pub total_staked_balance: ShareBalance,
+    pub total_staked_balance: Balance,
     // todo 是否需要一个这样的索引
     // pub shares: UnorderedMap<AccountId, ShareBalance>
 }

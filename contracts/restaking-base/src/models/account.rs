@@ -8,7 +8,7 @@ pub struct Account {
     pub legacy_shares: HashMap<PoolId, ShareBalance>,
 
     // todo need more suitable datastruct
-    pub pending_withdrawals: UnorderedMap<WithdrawalReceiptId, PendingWithdrawal>,
+    pub pending_withdrawals: UnorderedMap<WithdrawalCertificatetId, PendingWithdrawal>,
 }
 
 impl Account {

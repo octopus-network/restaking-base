@@ -124,7 +124,7 @@ pub async fn setup_common_test_env(worker: &Worker<Sandbox>) -> anyhow::Result<C
     let cc_pos_contract =
         MockConsumerChainPosContract::deploy(register_account(&worker, "cc_pos").await).await;
 
-    let cc_id = "test_chain".to_string();
+    let cc_id = "test:test".to_string();
     let cc_unbond_period = (86400 * 7) as u64;
     restaking_base_contract
         .register_consumer_chain(

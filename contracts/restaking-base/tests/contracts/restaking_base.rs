@@ -7,8 +7,6 @@ pub struct RestakingBaseContract {
     pub deploy_account: Account,
 }
 
-unsafe impl std::marker::Sync for RestakingBaseContract {}
-
 impl NearContract for RestakingBaseContract {
     fn get_deploy_account(&self) -> &Account {
         &self.deploy_account
@@ -19,6 +17,7 @@ impl NearContract for RestakingBaseContract {
 
 #[allow(unused)]
 impl RestakingBaseContract {
+
     pub async fn deploy(
         deploy_account: Account,
         owner: AccountId,
@@ -195,6 +194,21 @@ impl RestakingBaseContract {
 
     // #region ReStakingView
 
+    pub async fn call_get_validator_set(
+        &self,
+        signer: &Account,
+        consumer_chain_id: ConsumerChainId,
+        limit: u32,
+    ) -> ExecutionFinalResult {
+        signer
+            .call(&self.deploy_account.id(), "get_validator_set")
+            .args_json(json!({ "consumer_chain_id": consumer_chain_id, "limit": limit }))
+            .max_gas()
+            .transact()
+            .await
+            .unwrap()
+    }
+
     pub async fn get_validator_set(
         &self,
         signer: &Account,
@@ -203,7 +217,7 @@ impl RestakingBaseContract {
     ) -> ValidaotrSet {
         signer
             .view(&self.deploy_account.id(), "get_validator_set")
-            .args_json(json!({ "consumer_chain_id": consumer_chain_id }))
+            .args_json(json!({ "consumer_chain_id": consumer_chain_id, "limit": limit }))
             .await
             .unwrap()
             .json()
@@ -433,6 +447,27 @@ impl RestakingBaseContract {
             .call(self.get_deploy_account().id(), "set_slash_guarantee")
             .deposit(ONE_YOCTO)
             .args_json(json!({ "new_slash_guarantee": new_slash_guarantee }))
+            .transact()
+            .await
+            .unwrap()
+    }
+
+    pub async fn mock_staker_bond(
+        &self,
+        signer: &Account,
+        staker_sum: u32,
+        selected_pool_id: AccountId,
+        bond_cc_id: ConsumerChainId,
+    ) -> ExecutionFinalResult {
+        signer
+            .call(self.get_deploy_account().id(), "mock_staker_bond")
+            .deposit(parse_near!("0.1 near"))
+            .max_gas()
+            .args_json(json!({
+                "staker_sum": staker_sum,
+                "selected_pool_id": selected_pool_id,
+                "bond_cc_id": bond_cc_id
+            }))
             .transact()
             .await
             .unwrap()

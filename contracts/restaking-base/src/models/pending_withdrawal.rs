@@ -1,33 +1,33 @@
 use near_sdk::{EpochHeight, Timestamp};
 
-use crate::{types::WithdrawalReceiptId, *};
+use crate::{types::WithdrawalCertificatetId, *};
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct PendingWithdrawal {
-    pub withdrawal_certificate: WithdrawalReceiptId,
-    pub beneficiary: AccountId,
+    pub withdrawal_certificate: WithdrawalCertificatetId,
     pub pool_id: PoolId,
     pub amount: Balance,
     pub unlock_epoch: EpochHeight,
     pub unlock_time: Timestamp,
+    pub beneficiary: AccountId,
 }
 
 impl PendingWithdrawal {
     pub fn new(
-        withdrawal_certificate: WithdrawalReceiptId,
-        beneficiary: AccountId,
+        withdrawal_certificate: WithdrawalCertificatetId,
         pool_id: PoolId,
         amount: Balance,
         unlock_epoch: EpochHeight,
         unlock_time: Timestamp,
+        beneficiary: AccountId
     ) -> PendingWithdrawal {
         Self {
             withdrawal_certificate,
-            beneficiary,
             pool_id,
             amount,
             unlock_epoch,
             unlock_time,
+            beneficiary,
         }
     }
 
@@ -38,9 +38,9 @@ impl PendingWithdrawal {
 
     pub fn slash(
         &mut self,
-        withdrawal_certificate: WithdrawalReceiptId,
-        slash_beneficiary: AccountId,
+        withdrawal_certificate: WithdrawalCertificatetId,
         amount: Balance,
+        beneficiary: AccountId,
     ) -> Self {
         self.amount = self.amount
         .checked_sub(amount)
@@ -49,11 +49,11 @@ impl PendingWithdrawal {
 
         Self {
             withdrawal_certificate,
-            beneficiary: slash_beneficiary,
             pool_id: self.pool_id.clone(),
             amount: amount,
             unlock_epoch: self.unlock_epoch,
             unlock_time: env::block_timestamp(),
+            beneficiary,
         }
     }
 }
