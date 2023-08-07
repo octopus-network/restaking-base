@@ -2,7 +2,8 @@ use near_sdk::{EpochHeight, Timestamp};
 
 use crate::{types::WithdrawalCertificatetId, *};
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(BorshSerialize, BorshDeserialize, Debug, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
 pub struct PendingWithdrawal {
     pub withdrawal_certificate: WithdrawalCertificatetId,
     pub pool_id: PoolId,
@@ -19,7 +20,7 @@ impl PendingWithdrawal {
         amount: Balance,
         unlock_epoch: EpochHeight,
         unlock_time: Timestamp,
-        beneficiary: AccountId
+        beneficiary: AccountId,
     ) -> PendingWithdrawal {
         Self {
             withdrawal_certificate,

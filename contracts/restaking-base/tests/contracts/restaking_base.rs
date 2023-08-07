@@ -17,7 +17,6 @@ impl NearContract for RestakingBaseContract {
 
 #[allow(unused)]
 impl RestakingBaseContract {
-
     pub async fn deploy(
         deploy_account: Account,
         owner: AccountId,

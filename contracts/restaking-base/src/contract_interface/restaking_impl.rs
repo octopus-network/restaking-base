@@ -179,6 +179,7 @@ impl GovernanceAction for RestakingBaseContract {
 impl StakerRestakingAction for RestakingBaseContract {
     #[payable]
     fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool> {
+        log!("bond");
         assert_one_yocto();
 
         let staker_id = env::predecessor_account_id();
@@ -214,11 +215,7 @@ impl StakerRestakingAction for RestakingBaseContract {
     }
 
     #[payable]
-    fn change_key(
-        &mut self,
-        consumer_chain_id: ConsumerChainId,
-        new_key: String,
-    ) -> Promise {
+    fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) -> Promise {
         assert_one_yocto();
 
         // 1. check if bonding
@@ -408,7 +405,7 @@ impl RestakingBaseContract {
                         decrease_shares.into(),
                         receive_amount.into(),
                         governance.clone(),
-                        Some(governance.clone())
+                        Some(governance.clone()),
                     ),
             );
         actul_slash_amount

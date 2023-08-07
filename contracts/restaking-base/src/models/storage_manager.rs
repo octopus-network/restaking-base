@@ -81,7 +81,7 @@ impl RestakingBaseContract {
     ) -> StorageManager {
         self.storage_managers
             .get(account_id)
-            .expect(format!("Failed to get account by {}", account_id).as_str())
+            .expect(format!("Failed to get storage manager by {}", account_id).as_str())
     }
 
     pub(crate) fn internal_save_storage_manager(

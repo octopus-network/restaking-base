@@ -1,6 +1,6 @@
 use std::cmp::max;
 
-use crate::types::{DurationOfSeconds, PoolId, ShareBalance, Sequence};
+use crate::types::{DurationOfSeconds, PoolId, Sequence, ShareBalance};
 use crate::*;
 use near_sdk::{collections::UnorderedSet, Timestamp};
 

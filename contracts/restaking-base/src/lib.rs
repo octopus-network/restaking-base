@@ -34,7 +34,7 @@ pub struct RestakingBaseContract {
     pub sequence: u64,
     pub stakers: LookupMap<AccountId, Staker>,
     // todo 如果一个pool从白名单移除， 需要处理
-    pub staking_pools: LookupMap<PoolId, StakingPool>,
+    pub staking_pools: UnorderedMap<PoolId, StakingPool>,
     pub consumer_chains: UnorderedMap<ConsumerChainId, ConsumerChain>,
     pub cc_register_fee: Balance,
     pub staking_pool_whitelist_account: AccountId,
@@ -58,7 +58,7 @@ impl RestakingBaseContract {
             uuid: 0,
             sequence: 0,
             stakers: LookupMap::new(StorageKey::Stakers),
-            staking_pools: LookupMap::new(StorageKey::StakingPools),
+            staking_pools: UnorderedMap::new(StorageKey::StakingPools),
             consumer_chains: UnorderedMap::new(StorageKey::ConsumerChains),
             cc_register_fee: cc_register_fee.0,
             staking_pool_whitelist_account,
@@ -71,6 +71,7 @@ impl RestakingBaseContract {
 
     pub(crate) fn transfer_near(&self, account_id: AccountId, amount: Balance) {
         assert!(amount > 0, "Failed to send near because the amount is 0.");
+        log!("transfer {} to {}", amount, account_id);
         Promise::new(account_id).transfer(amount);
     }
 

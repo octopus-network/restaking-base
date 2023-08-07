@@ -5,6 +5,7 @@ use near_sdk::Balance;
 #[derive(BorshSerialize, BorshDeserialize, Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct StakingPool {
+    pub pool_id: AccountId,
     #[serde(default)]
     #[serde(with = "u128_dec_format")]
     pub total_staked_shares: ShareBalance,
