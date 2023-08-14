@@ -7,6 +7,8 @@ use crate::{types::WithdrawalCertificatetId, *};
 pub struct PendingWithdrawal {
     pub withdrawal_certificate: WithdrawalCertificatetId,
     pub pool_id: PoolId,
+
+    #[serde(with = "u128_dec_format")]
     pub amount: Balance,
     pub unlock_epoch: EpochHeight,
     pub unlock_time: Timestamp,

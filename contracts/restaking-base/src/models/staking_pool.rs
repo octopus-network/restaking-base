@@ -1,22 +1,126 @@
+use std::collections::HashSet;
+
 use crate::types::{ShareBalance, U256};
 use crate::*;
 use near_sdk::Balance;
 
-#[derive(BorshSerialize, BorshDeserialize, Debug, Serialize, Deserialize, Clone)]
-#[serde(crate = "near_sdk::serde")]
+#[derive(BorshSerialize, BorshDeserialize)]
 pub struct StakingPool {
     pub pool_id: AccountId,
-    #[serde(default)]
+    pub total_staked_shares: ShareBalance,
+    pub total_staked_balance: Balance,
+    pub stakers: UnorderedSet<AccountId>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct StakingPoolInfo {
+    pub pool_id: AccountId,
     #[serde(with = "u128_dec_format")]
     pub total_staked_shares: ShareBalance,
-    #[serde(default)]
     #[serde(with = "u128_dec_format")]
     pub total_staked_balance: Balance,
-    // todo 是否需要一个这样的索引
-    // pub shares: UnorderedMap<AccountId, ShareBalance>
+    pub stakers: HashSet<AccountId>,
 }
 
 impl StakingPool {
+
+    pub fn new(pool_id: AccountId, first_staker: AccountId) -> Self {
+        let mut pool = Self {
+            pool_id: pool_id.clone(),
+            total_staked_shares: 0,
+            total_staked_balance: 0,
+            stakers: UnorderedSet::new(StorageKey::StakingPoolStakers { pool_id: pool_id }),
+        };
+        pool.stakers.insert(&first_staker);
+        pool
+    }
+
+    pub fn stake(
+        &mut self, 
+        staker: &mut Staker,
+        stake_shares: ShareBalance,
+        new_total_staked_balance: Balance
+    ) {
+        staker.select_staking_pool = Some(self.pool_id.clone());
+
+        self.stakers.insert(&staker.staker_id);
+        
+        self.increase_stake(staker, stake_shares, new_total_staked_balance);
+    }
+
+    pub fn increase_stake(
+        &mut self,
+        staker: &mut Staker,
+        increase_shares: ShareBalance,
+        new_total_staked_balance: Balance
+    ) {
+        self.total_staked_shares += increase_shares;
+        self.total_staked_balance = new_total_staked_balance;
+
+        staker.shares += increase_shares;
+    }
+
+    pub fn decrease_stake(
+        &mut self,
+        staker: &mut Staker,
+        decrease_shares: ShareBalance,
+        new_total_staked_balance: Balance,
+    ) {
+        staker.shares = staker.shares.checked_sub(decrease_shares).expect("Staker shares not enough.");
+        self.total_staked_shares -= decrease_shares; 
+        self.total_staked_balance = new_total_staked_balance;
+    }
+
+    pub fn unstake(
+        &mut self, 
+        staker: &mut Staker,
+        new_total_staked_balance: u128,
+    ) {
+        self.decrease_stake(
+            staker, 
+            staker.shares.clone(), 
+            new_total_staked_balance
+        );
+        self.stakers.remove(&staker.staker_id);
+    }
+
+    pub fn calculate_increase_shares(&self, increase_near_amount: Balance) -> ShareBalance {
+        assert!(
+            increase_near_amount > 0,
+            "Increase delegation amount should be positvie"
+        );
+        let increase_shares =
+            self.share_balance_from_staked_amount_rounded_down(increase_near_amount);
+        assert!(
+			increase_shares>0,
+            "Invariant violation. The calculated number of stake shares for unstaking should be positive"
+		);
+
+        let charge_amount = self.staked_amount_from_shares_balance_rounded_down(increase_shares);
+        assert!(
+            charge_amount > 0 && increase_near_amount >= charge_amount,
+            "charge_amount: {}, increase_near_amount: {}",
+            charge_amount,
+            increase_near_amount
+        );
+        increase_shares
+    }
+
+    pub fn calculate_decrease_shares(
+        &self, 
+        decrease_near_amount: Balance
+    )->ShareBalance{
+        assert!(decrease_near_amount>0, "Decrease near amount should be positive");
+        let decrease_shares = self.num_shares_from_staked_amount_rounded_up(decrease_near_amount);
+        assert!(
+            decrease_shares > 0,
+            "Invariant violation. The calculated number of \"stake\" shares for unstaking should be positive"
+        );
+
+        decrease_shares
+    }
+
     /// Returns the number of "stake" shares rounded down corresponding to the given staked balance
     /// amount.
     ///
@@ -95,10 +199,9 @@ impl RestakingBaseContract {
 
     pub(crate) fn internal_save_staking_pool(
         &mut self,
-        pool_id: &PoolId,
         staking_pool: &StakingPool,
     ) {
-        self.staking_pools.insert(pool_id, &staking_pool);
+        self.staking_pools.insert(&staking_pool.pool_id, &staking_pool);
     }
 
     pub(crate) fn internal_use_staking_pool_or_panic<F, R>(
@@ -111,7 +214,7 @@ impl RestakingBaseContract {
     {
         let mut staking_pool = self.internal_get_staking_pool_or_panic(pool_id);
         let r = f(&mut staking_pool);
-        self.internal_save_staking_pool(pool_id, &staking_pool);
+        self.internal_save_staking_pool(&staking_pool);
         r
     }
 

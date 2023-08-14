@@ -1,9 +1,4 @@
-use crate::{
-    models::{consumer_chain::ConsumerChainView, staker::StakerView},
-    types::{Sequence, WithdrawalCertificatetId},
-};
-
-use super::*;
+use crate::*;
 
 pub trait StakerAction {
     fn ping(&mut self, pool_id: Option<PoolId>) -> Promise;
@@ -54,11 +49,21 @@ pub trait StakingCallBack {
     //     stake_amount: U128,
     // );
 
+    fn stake_after_ping(
+        &mut self,
+        staker_id: AccountId,
+    )-> PromiseOrValue<Option<StakingChangeResult>>;
+
     fn increase_stake_after_ping(
         &mut self,
         staker_id: AccountId,
-        increase_amount: U128,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
+
+    fn stake_callback(
+        &mut self,
+        staker_id: AccountId,
+        stake_amount: U128
+    )-> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn increase_stake_callback(
         &mut self,
