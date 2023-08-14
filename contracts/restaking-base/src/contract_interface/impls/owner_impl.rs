@@ -1,7 +1,6 @@
 use near_contract_standards::storage_management::StorageManagement;
 
-use super::owner::{ContractSettingView, OwnerAction};
-use crate::*;
+use crate::{*, contract_interface::owner::OwnerAction};
 
 #[near_bindgen]
 impl OwnerAction for RestakingBaseContract {
