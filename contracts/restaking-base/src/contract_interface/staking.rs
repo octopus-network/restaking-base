@@ -71,10 +71,18 @@ pub trait StakingCallBack {
         increase_amount: U128,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
+    fn unstake_callback(
+        &mut self,
+        staker_id: AccountId,
+        decrease_share_balance: U128,
+        receive_amount: U128,
+        beneficiary: AccountId,
+    ) -> PromiseOrValue<Option<StakingChangeResult>>;
+
     fn decrease_stake_callback(
         &mut self,
         staker_id: AccountId,
-        share_balance: U128,
+        decrease_share_balance: U128,
         decrease_amount: U128,
         beneficiary: AccountId,
         slash_governance: Option<AccountId>,
@@ -83,7 +91,13 @@ pub trait StakingCallBack {
     fn decrease_stake_after_ping(
         &mut self,
         staker_id: AccountId,
-        decrease_amount: Option<U128>,
+        decrease_amount: U128,
+        beneficiary: AccountId,
+    ) -> PromiseOrValue<Option<StakingChangeResult>>;
+
+    fn unstake_after_ping(
+        &mut self,
+        staker_id: AccountId,
         beneficiary: AccountId,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
