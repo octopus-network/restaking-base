@@ -12,11 +12,15 @@ pub enum ConsumerChainStatus {
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct ConsumerChain {
     pub consumer_chain_id: ConsumerChainId,
+    /// Staker need to wait some period for unbonding consumer chain
     pub unbond_period: DurationOfSeconds,
+    /// The url of consuemr chain's websit
     pub website: String,
+    /// The account id of governance
     pub governance: AccountId,
-    // todo need a more suitable datastruct
+    /// The set of bonding stakers' ids
     pub bonding_stakers: UnorderedSet<StakerId>,
+    /// The account id of treasury, the slash  
     pub treasury: AccountId,
     pub status: ConsumerChainStatus,
     pub pos_account_id: AccountId,
@@ -168,19 +172,18 @@ pub struct ConsumerChainRegisterParam {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
-pub struct ConsumerChainView {
+pub struct ConsumerChainInfo {
     pub consumer_chain_id: ConsumerChainId,
     pub unbond_period: DurationOfSeconds,
     pub website: String,
     pub governance: AccountId,
-
     pub treasury: AccountId,
     pub status: ConsumerChainStatus,
     pub pos_account_id: AccountId,
     pub register_fee: U128,
 }
 
-impl From<ConsumerChain> for ConsumerChainView {
+impl From<ConsumerChain> for ConsumerChainInfo {
     fn from(value: ConsumerChain) -> Self {
         Self {
             consumer_chain_id: value.consumer_chain_id,

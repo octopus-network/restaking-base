@@ -1,23 +1,24 @@
 use near_sdk::{EpochHeight, Timestamp};
 
-use crate::{types::WithdrawalCertificatetId, *};
+use crate::{types::WithdrawalCertificate, *};
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct PendingWithdrawal {
-    pub withdrawal_certificate: WithdrawalCertificatetId,
+    pub withdrawal_certificate: WithdrawalCertificate,
     pub pool_id: PoolId,
-
     #[serde(with = "u128_dec_format")]
     pub amount: Balance,
+    #[serde(with = "u64_dec_format")]
     pub unlock_epoch: EpochHeight,
+    #[serde(with = "u64_dec_format")]
     pub unlock_time: Timestamp,
     pub beneficiary: AccountId,
 }
 
 impl PendingWithdrawal {
     pub fn new(
-        withdrawal_certificate: WithdrawalCertificatetId,
+        withdrawal_certificate: WithdrawalCertificate,
         pool_id: PoolId,
         amount: Balance,
         unlock_epoch: EpochHeight,
@@ -41,7 +42,7 @@ impl PendingWithdrawal {
 
     pub fn slash(
         &mut self,
-        withdrawal_certificate: WithdrawalCertificatetId,
+        withdrawal_certificate: WithdrawalCertificate,
         amount: Balance,
         beneficiary: AccountId,
     ) -> Self {

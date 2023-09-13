@@ -8,7 +8,7 @@ pub type DurationOfSeconds = u64;
 pub type ConsumerChainId = String;
 pub type Key = String;
 pub type SlashId = U64;
-pub type WithdrawalCertificatetId = U64;
+pub type WithdrawalCertificate = U64;
 pub type ValidaotrSet = Vec<(AccountId, U128)>;
 pub type Sequence = U64;
 

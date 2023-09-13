@@ -7,13 +7,17 @@ use near_sdk::{collections::UnorderedSet, Timestamp};
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct Staker {
     pub staker_id: StakerId,
+    /// The staking pool which staker is select to stake
     pub select_staking_pool: Option<PoolId>,
+    /// The share of staker owned in staking pool
     pub shares: ShareBalance,
 
+    /// The map from consumer chain id to unbonding period
     pub bonding_consumer_chains: UnorderedMap<ConsumerChainId, DurationOfSeconds>,
+    /// The max period of bonding unlock
     pub max_bonding_unlock_period: Timestamp,
+    /// If execute unbond it'll record unlock time
     pub unbonding_unlock_time: Timestamp,
-    // pub withdrawal
 }
 
 impl Staker {
@@ -60,6 +64,13 @@ impl Staker {
             self.unbonding_unlock_time,
             env::block_timestamp() + unbond_period,
         );
+
+        self.max_bonding_unlock_period = self
+            .bonding_consumer_chains
+            .iter()
+            .map(|e| e.1)
+            .max()
+            .unwrap_or(0);
     }
 }
 
@@ -93,7 +104,7 @@ impl RestakingBaseContract {
 
 #[derive(Serialize)]
 #[serde(crate = "near_sdk::serde")]
-pub struct StakerView {
+pub struct StakerInfo {
     pub staker_id: StakerId,
     pub select_staking_pool: Option<PoolId>,
     pub shares: U128,
@@ -101,11 +112,11 @@ pub struct StakerView {
     pub unbonding_unlock_time: U64,
 }
 
-impl From<Staker> for StakerView {
-    fn from(value: Staker) -> Self {
-        StakerView {
-            staker_id: value.staker_id,
-            select_staking_pool: value.select_staking_pool,
+impl From<&Staker> for StakerInfo {
+    fn from(value: &Staker) -> Self {
+        StakerInfo {
+            staker_id: value.staker_id.clone(),
+            select_staking_pool: value.select_staking_pool.clone(),
             shares: value.shares.into(),
             max_bonding_unlock_period: value.max_bonding_unlock_period.into(),
             unbonding_unlock_time: value.unbonding_unlock_time.into(),
@@ -118,4 +129,5 @@ impl From<Staker> for StakerView {
 pub struct StakingChangeResult {
     pub sequence: Sequence,
     pub new_total_staked_balance: U128,
+    pub withdrawal_certificate: Option<WithdrawalCertificate>,
 }

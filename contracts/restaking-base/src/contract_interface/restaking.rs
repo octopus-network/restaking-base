@@ -1,5 +1,5 @@
 use crate::{
-    models::consumer_chain::ConsumerChainView,
+    models::consumer_chain::ConsumerChainInfo,
     types::{SlashId, ValidaotrSet},
 };
 
@@ -39,13 +39,14 @@ pub trait ReStakingCallBack {
     fn bond_callback(
         &mut self,
         consumer_chain_id: ConsumerChainId,
+        key: String,
         staker_id: AccountId,
         success: bool,
     ) -> PromiseOrValue<bool>;
 }
 
 pub trait ReStakingView {
-    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainView>;
+    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainInfo>;
     fn get_validator_set(&self, consumer_chain_id: ConsumerChainId, limit: u32) -> ValidaotrSet;
     fn get_slash_guarantee(&self) -> U128;
     fn get_cc_register_fee(&self) -> U128;

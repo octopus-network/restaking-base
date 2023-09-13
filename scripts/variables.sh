@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-DEPLOY_ACCOUNT=contract.restaking-base.testnet
+DEPLOY_ACCOUNT=contract3.restaking-base.testnet
 OWNER_ACCOUNT_ID=owner.restaking-base.testnet
 
 CC_REGISTER_FEE=100000000000000000000000

@@ -8,9 +8,12 @@ const fn _default_slash_guarantee() -> U128 {
 #[serde(crate = "near_sdk::serde")]
 pub struct Slash {
     pub consumer_chain_id: ConsumerChainId,
+    /// The slash items is a vector of tuple
+    /// The first element in tuple means which staker need to slash
+    /// The second element in tuple means how much near need to slash
     pub slash_items: Vec<(AccountId, U128)>,
+    /// sha256 hash of evidence
     pub evidence_sha256_hash: String,
-
     #[serde(skip_deserializing)]
     #[serde(default = "_default_slash_guarantee")]
     pub slash_guarantee: U128,
@@ -30,6 +33,6 @@ impl RestakingBaseContract {
         let submitter = self
             .internal_get_consumer_chain_or_panic(&slash.consumer_chain_id)
             .pos_account_id;
-        self.transfer_near(submitter, self.slash_guarantee);
+        self.transfer_near(submitter, slash.slash_guarantee.0);
     }
 }

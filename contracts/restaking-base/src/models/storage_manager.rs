@@ -2,7 +2,9 @@ use crate::*;
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct StorageManager {
+    /// The near amount for storage
     pub near_amount_for_storage: Balance,
+    /// The used storage
     pub storage_usage: StorageUsage,
 }
 

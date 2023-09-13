@@ -29,6 +29,13 @@ impl ConsumerChainAction for RestakingBaseContract {
 
         let slash_id = U64(self.next_uuid());
 
+        Event::RequestSlash {
+            consumer_chain_id: &consumer_chain_id,
+            slash_items: &near_sdk::serde_json::to_string(&slash_items).unwrap(),
+            evidence_sha256_hash: &evidence_sha256_hash,
+        }
+        .emit();
+
         // needn't check storage, the slash guarantee should able to cover storage.
         self.slashes.insert(
             &slash_id,
@@ -39,6 +46,7 @@ impl ConsumerChainAction for RestakingBaseContract {
                 slash_guarantee: self.slash_guarantee.into(),
             },
         );
+
         slash_id
     }
 }
@@ -67,15 +75,20 @@ impl GovernanceAction for RestakingBaseContract {
         validate_chain_id(&register_param.consumer_chain_id);
 
         let consumer_chain = ConsumerChain::new_from_register_param(
-            register_param,
+            register_param.clone(),
             env::predecessor_account_id(),
             self.cc_register_fee,
         );
 
         // needn't check storage, the register fee should able to cover storage.
-
         self.consumer_chains
             .insert(&consumer_chain.consumer_chain_id, &consumer_chain);
+
+        Event::RegisterConsumerChain {
+            consumer_chain_info: &consumer_chain.into(),
+            consumer_chain_register_param: &register_param,
+        }
+        .emit();
     }
 
     #[payable]
@@ -83,10 +96,15 @@ impl GovernanceAction for RestakingBaseContract {
         // todo how to clean consumer chain state?
 
         assert_one_yocto();
-        self.internal_use_consumer_chain_or_panic(&consumer_chain_id, |consumer_chain| {
-            consumer_chain.assert_cc_gov();
-            consumer_chain.status = ConsumerChainStatus::Deregistered;
-        });
+
+        let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
+        consumer_chain.assert_cc_gov();
+        consumer_chain.status = ConsumerChainStatus::Deregistered;
+        self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
+        Event::DeregisterConsumerChain {
+            consumer_chain_info: &consumer_chain.into(),
+        }
+        .emit();
     }
 
     #[payable]
@@ -111,9 +129,15 @@ impl GovernanceAction for RestakingBaseContract {
             consumer_chain.governance
         );
 
-        consumer_chain.update(update_param);
+        consumer_chain.update(update_param.clone());
         self.consumer_chains
             .insert(&consumer_chain_id, &consumer_chain);
+
+        Event::UpdateConsumerChain {
+            consumer_chain_info: &consumer_chain.into(),
+            consumer_chain_update_param: &update_param,
+        }
+        .emit();
     }
 
     #[payable]
@@ -179,12 +203,12 @@ impl StakerRestakingAction for RestakingBaseContract {
             .then(
                 ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_CHANGE_KEY))
-                    .bond(staker_id.clone(), key),
+                    .bond(staker_id.clone(), key.clone()),
             )
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_BOND_CALLBACK))
-                    .bond_callback(consumer_chain_id, staker_id),
+                    .bond_callback(consumer_chain_id, key, staker_id),
             )
             .into()
     }
@@ -234,6 +258,7 @@ impl ReStakingCallBack for RestakingBaseContract {
     fn bond_callback(
         &mut self,
         consumer_chain_id: ConsumerChainId,
+        key: String,
         staker_id: AccountId,
         #[callback] success: bool,
     ) -> PromiseOrValue<bool> {
@@ -244,16 +269,22 @@ impl ReStakingCallBack for RestakingBaseContract {
             return PromiseOrValue::Value(false);
         }
 
+        Event::StakerBond {
+            staker_id: &staker_id,
+            consumer_chain_id: &consumer_chain_id,
+            key: &key,
+        }
+        .emit();
         PromiseOrValue::Value(true)
     }
 }
 
 #[near_bindgen]
 impl ReStakingView for RestakingBaseContract {
-    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainView> {
+    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainInfo> {
         self.consumer_chains
             .get(&consumer_chain_id)
-            .map(ConsumerChainView::from)
+            .map(ConsumerChainInfo::from)
     }
 
     fn get_validator_set(&self, consumer_chain_id: ConsumerChainId, limit: u32) -> ValidaotrSet {
