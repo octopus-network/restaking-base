@@ -164,11 +164,7 @@ impl StakerAction for RestakingBaseContract {
             .into();
     }
 
-    fn withdraw(
-        &mut self,
-        staker: AccountId,
-        id: WithdrawalCertificate,
-    ) -> PromiseOrValue<U128> {
+    fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128> {
         let account = self.internal_get_account_or_panic(&staker);
         let pending_withdrawal = account.pending_withdrawals.get(&id).unwrap();
 
@@ -232,13 +228,13 @@ impl StakeView for RestakingBaseContract {
 }
 
 #[near_bindgen]
-impl StakingCallBack for RestakingBaseContract {
+impl StakingCallback for RestakingBaseContract {
     #[private]
     fn withdraw_callback(
         &mut self,
         account_id: AccountId,
         withdrawal_certificate: WithdrawalCertificate,
-    )-> PromiseOrValue<U128> {
+    ) -> PromiseOrValue<U128> {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
@@ -413,7 +409,7 @@ impl StakingCallBack for RestakingBaseContract {
                     new_total_staked_balance: staking_pool
                         .staked_amount_from_shares_balance_rounded_down(staker.shares)
                         .into(),
-                    withdrawal_certificate: Some(withdraw_certificate)
+                    withdrawal_certificate: Some(withdraw_certificate),
                 }))
             }
             PromiseResult::Failed => {
@@ -643,7 +639,7 @@ impl StakingCallBack for RestakingBaseContract {
                 return PromiseOrValue::Value(Some(StakingChangeResult {
                     sequence,
                     new_total_staked_balance: staker_new_balance.into(),
-                    withdrawal_certificate: None
+                    withdrawal_certificate: None,
                 }));
             }
             PromiseResult::Failed => {
@@ -705,7 +701,7 @@ impl StakingCallBack for RestakingBaseContract {
                     new_total_staked_balance: staking_pool
                         .staked_amount_from_shares_balance_rounded_down(staker.shares)
                         .into(),
-                    withdrawal_certificate: None
+                    withdrawal_certificate: None,
                 }));
             }
             PromiseResult::Failed => {

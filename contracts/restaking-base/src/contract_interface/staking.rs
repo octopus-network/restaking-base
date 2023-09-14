@@ -10,8 +10,7 @@ pub trait StakerAction {
         beneficiary: Option<AccountId>,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
     fn unstake(&mut self) -> PromiseOrValue<Option<StakingChangeResult>>;
-    fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate)
-        -> PromiseOrValue<U128>;
+    fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128>;
 }
 
 pub trait StakeView {
@@ -33,7 +32,7 @@ pub trait StakeView {
     fn get_account_staked_balance(&self, account_id: AccountId) -> U128;
 }
 
-pub trait StakingCallBack {
+pub trait StakingCallback {
     // fn select_pool_callback(&mut self, staker_id: AccountId, pool_id: PoolId, whitelisted: bool)->PromiseOrValue<bool>;
     fn stake_after_check_whitelisted(
         &mut self,
@@ -105,7 +104,7 @@ pub trait StakingCallBack {
         &mut self,
         account_id: AccountId,
         withdrawal_certificate: WithdrawalCertificate,
-    )-> PromiseOrValue<U128>;
+    ) -> PromiseOrValue<U128>;
 
     fn ping_callback(&mut self, pool_id: PoolId, staked_balance: U128);
 }

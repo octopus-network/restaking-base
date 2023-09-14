@@ -38,12 +38,12 @@ use crate::constants::gas_constants::*;
 use crate::external::consumer_chain_pos::ext_consumer_chain_pos;
 use crate::{
     constants::NUM_EPOCHS_TO_UNLOCK,
-    contract_interface::staking::{StakeView, StakerAction, StakingCallBack},
+    contract_interface::staking::{StakeView, StakerAction, StakingCallback},
     external::staking_pool_whitelist::ext_whitelist,
     types::ShareBalance,
 };
 use crate::{
-    contract_interface::restaking::*, external::staking_pool::ext_staking_pool, types::ValidaotrSet,
+    contract_interface::restaking::*, external::staking_pool::ext_staking_pool, types::ValidatorSet,
 };
 use itertools::Itertools;
 use near_sdk::Gas;
@@ -55,7 +55,6 @@ use std::ops::Mul;
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct RestakingBaseContract {
-
     /// The owner of contract
     pub owner: AccountId,
     /// Universally Unique Identifier for some entity
@@ -72,7 +71,7 @@ pub struct RestakingBaseContract {
     pub cc_register_fee: Balance,
     /// The staking pool whitelist account
     pub staking_pool_whitelist_account: AccountId,
-    /// The guarantee of slash 
+    /// The guarantee of slash
     pub slash_guarantee: Balance,
     /// The map from slash id to slash struct
     pub slashes: LookupMap<SlashId, Slash>,

@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{types::ValidatorSetInSequence, *};
 
 #[near_bindgen]
 impl ConsumerChainAction for RestakingBaseContract {
@@ -178,13 +178,11 @@ impl GovernanceAction for RestakingBaseContract {
 impl StakerRestakingAction for RestakingBaseContract {
     #[payable]
     fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool> {
-        log!("bond");
         assert_one_yocto();
 
         let staker_id = env::predecessor_account_id();
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
-
         let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker.staker_id);
 
         storage_manager.execute_in_storage_monitoring(|| {
@@ -196,8 +194,6 @@ impl StakerRestakingAction for RestakingBaseContract {
             self.internal_save_staker(&staker_id, &staker);
             self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
         });
-
-        // self.internal_bond(&mut staker, &mut consumer_chain);
 
         self.ping(Option::None)
             .then(
@@ -214,7 +210,7 @@ impl StakerRestakingAction for RestakingBaseContract {
     }
 
     #[payable]
-    fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) -> Promise {
+    fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) {
         assert_one_yocto();
 
         // 1. check if bonding
@@ -232,11 +228,11 @@ impl StakerRestakingAction for RestakingBaseContract {
 
         ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_CHANGE_KEY))
-            .change_key(staker.staker_id, new_key)
+            .change_key(staker.staker_id, new_key);
     }
 
     #[payable]
-    fn unbond(&mut self, consumer_chain_id: ConsumerChainId) -> PromiseOrValue<bool> {
+    fn unbond(&mut self, consumer_chain_id: ConsumerChainId) {
         assert_one_yocto();
         let staker_id = env::predecessor_account_id();
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
@@ -248,49 +244,55 @@ impl StakerRestakingAction for RestakingBaseContract {
             staker.unbond(&consumer_chain.consumer_chain_id);
         });
         self.internal_save_storage_manager(&staker_id, &storage_manager);
-        PromiseOrValue::Value(true)
     }
 }
 
 #[near_bindgen]
-impl ReStakingCallBack for RestakingBaseContract {
+impl RestakingCallback for RestakingBaseContract {
     #[private]
     fn bond_callback(
         &mut self,
         consumer_chain_id: ConsumerChainId,
         key: String,
         staker_id: AccountId,
-        #[callback] success: bool,
     ) -> PromiseOrValue<bool> {
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
-        if !success {
-            self.internal_rollback_bond(&mut staker, &mut consumer_chain);
-            return PromiseOrValue::Value(false);
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Failed => {
+                self.internal_rollback_bond(&mut staker, &mut consumer_chain);
+                PromiseOrValue::Value(false)
+            }
+            PromiseResult::Successful(_) => {
+                Event::StakerBond {
+                    staker_id: &staker_id,
+                    consumer_chain_id: &consumer_chain_id,
+                    key: &key,
+                }
+                .emit();
+                PromiseOrValue::Value(true)
+            }
         }
-
-        Event::StakerBond {
-            staker_id: &staker_id,
-            consumer_chain_id: &consumer_chain_id,
-            key: &key,
-        }
-        .emit();
-        PromiseOrValue::Value(true)
     }
 }
 
 #[near_bindgen]
-impl ReStakingView for RestakingBaseContract {
+impl RestakingView for RestakingBaseContract {
     fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainInfo> {
         self.consumer_chains
             .get(&consumer_chain_id)
             .map(ConsumerChainInfo::from)
     }
 
-    fn get_validator_set(&self, consumer_chain_id: ConsumerChainId, limit: u32) -> ValidaotrSet {
+    fn get_validator_set(
+        &self,
+        consumer_chain_id: ConsumerChainId,
+        limit: u32,
+    ) -> ValidatorSetInSequence {
         let consumer_chains = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
 
-        consumer_chains
+        let validator_set = consumer_chains
             .bonding_stakers
             .iter()
             .map(|staker_id| {
@@ -299,7 +301,13 @@ impl ReStakingView for RestakingBaseContract {
                     U128(self.get_staker_staked_balance(&staker_id)),
                 )
             })
-            .collect_vec()
+            .sorted_by(|a, b| Ord::cmp(&b.1, &a.1))
+            .take(limit as usize)
+            .collect_vec();
+        ValidatorSetInSequence {
+            validator_set: validator_set,
+            sequence: self.sequence.into(),
+        }
     }
 
     fn get_slash_guarantee(&self) -> U128 {
