@@ -7,9 +7,13 @@ use near_sdk::Balance;
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct StakingPool {
     pub pool_id: AccountId,
-    pub total_staked_shares: ShareBalance,
+    /// Total minted share balance in this staking pool
+    pub total_share_balance: ShareBalance,
+    /// Total staked near balance in this staking pool
     pub total_staked_balance: Balance,
+    /// The set of all stakers' ids
     pub stakers: UnorderedSet<AccountId>,
+    /// When restaking base contract interactive with staking pool contract, it'll lock this staking pool until all cross contract call finished
     pub locked: bool,
 }
 
@@ -18,18 +22,51 @@ pub struct StakingPool {
 pub struct StakingPoolInfo {
     pub pool_id: AccountId,
     #[serde(with = "u128_dec_format")]
-    pub total_staked_shares: ShareBalance,
+    pub total_share_balance: ShareBalance,
+    #[serde(with = "u128_dec_format")]
+    pub total_staked_balance: Balance,
+    pub locked: bool,
+}
+
+impl From<&mut StakingPool> for StakingPoolInfo {
+    fn from(value: &mut StakingPool) -> Self {
+        Self {
+            pool_id: value.pool_id.clone(),
+            total_share_balance: value.total_share_balance,
+            total_staked_balance: value.total_staked_balance,
+            locked: value.locked,
+        }
+    }
+}
+
+impl From<StakingPool> for StakingPoolInfo {
+    fn from(value: StakingPool) -> Self {
+        Self {
+            pool_id: value.pool_id,
+            total_share_balance: value.total_share_balance,
+            total_staked_balance: value.total_staked_balance,
+            locked: value.locked,
+        }
+    }
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct StakingPoolDetail {
+    pub pool_id: AccountId,
+    #[serde(with = "u128_dec_format")]
+    pub total_share_balance: ShareBalance,
     #[serde(with = "u128_dec_format")]
     pub total_staked_balance: Balance,
     pub stakers: HashSet<AccountId>,
+    pub locked: bool,
 }
 
 impl StakingPool {
-
     pub fn new(pool_id: AccountId, first_staker: AccountId) -> Self {
         let mut pool = Self {
             pool_id: pool_id.clone(),
-            total_staked_shares: 0,
+            total_share_balance: 0,
             total_staked_balance: 0,
             stakers: UnorderedSet::new(StorageKey::StakingPoolStakers { pool_id: pool_id }),
             locked: false,
@@ -48,30 +85,31 @@ impl StakingPool {
     }
 
     pub fn stake(
-        &mut self, 
+        &mut self,
         staker: &mut Staker,
         increase_amount: Balance,
-        new_total_staked_balance: Balance
-    ) {
+        new_total_staked_balance: Balance,
+    ) -> ShareBalance {
         staker.select_staking_pool = Some(self.pool_id.clone());
 
         self.stakers.insert(&staker.staker_id);
-        
-        self.increase_stake(staker, increase_amount, new_total_staked_balance);
+
+        self.increase_stake(staker, increase_amount, new_total_staked_balance)
     }
 
     pub fn increase_stake(
         &mut self,
         staker: &mut Staker,
         increase_amount: Balance,
-        new_total_staked_balance: Balance
-    ) {
+        new_total_staked_balance: Balance,
+    ) -> ShareBalance {
         let increase_shares = self.calculate_increase_shares(increase_amount);
 
-        self.total_staked_shares += increase_shares;
+        self.total_share_balance += increase_shares;
         self.total_staked_balance = new_total_staked_balance;
 
         staker.shares += increase_shares;
+        increase_shares
     }
 
     pub fn decrease_stake(
@@ -79,20 +117,17 @@ impl StakingPool {
         decrease_shares: ShareBalance,
         new_total_staked_balance: Balance,
     ) {
-        self.total_staked_shares -= decrease_shares; 
+        self.total_share_balance -= decrease_shares;
         self.total_staked_balance = new_total_staked_balance;
     }
 
     pub fn unstake(
-        &mut self, 
+        &mut self,
         staker_id: &AccountId,
         decrease_shares: ShareBalance,
         new_total_staked_balance: u128,
     ) {
-        self.decrease_stake(
-            decrease_shares, 
-            new_total_staked_balance
-        );
+        self.decrease_stake(decrease_shares, new_total_staked_balance);
         self.stakers.remove(&staker_id);
     }
 
@@ -118,11 +153,11 @@ impl StakingPool {
         increase_shares
     }
 
-    pub fn calculate_decrease_shares(
-        &self, 
-        decrease_near_amount: Balance
-    )->ShareBalance{
-        assert!(decrease_near_amount>0, "Decrease near amount should be positive");
+    pub fn calculate_decrease_shares(&self, decrease_near_amount: Balance) -> ShareBalance {
+        assert!(
+            decrease_near_amount > 0,
+            "Decrease near amount should be positive"
+        );
         let decrease_shares = self.num_shares_from_staked_amount_rounded_up(decrease_near_amount);
         assert!(
             decrease_shares > 0,
@@ -149,7 +184,7 @@ impl StakingPool {
             return stake_amount;
         }
 
-        (U256::from(self.total_staked_shares) * U256::from(stake_amount)
+        (U256::from(self.total_share_balance) * U256::from(stake_amount)
             / U256::from(self.total_staked_balance))
         .as_u128()
     }
@@ -163,7 +198,7 @@ impl StakingPool {
             self.total_staked_balance > 0,
             "The total staked balance can't be 0"
         );
-        ((U256::from(self.total_staked_shares) * U256::from(amount)
+        ((U256::from(self.total_share_balance) * U256::from(amount)
             + U256::from(self.total_staked_balance - 1))
             / U256::from(self.total_staked_balance))
         .as_u128()
@@ -174,12 +209,12 @@ impl StakingPool {
         &self,
         share_balance: ShareBalance,
     ) -> Balance {
-        if self.total_staked_shares == 0 {
+        if self.total_share_balance == 0 {
             return share_balance;
         }
 
         (U256::from(self.total_staked_balance) * U256::from(share_balance)
-            / U256::from(self.total_staked_shares))
+            / U256::from(self.total_share_balance))
         .as_u128()
     }
 
@@ -191,12 +226,12 @@ impl StakingPool {
         share_balance: ShareBalance,
     ) -> Balance {
         assert!(
-            self.total_staked_shares > 0,
+            self.total_share_balance > 0,
             "The total number of stake shares can't be 0"
         );
         ((U256::from(self.total_staked_balance) * U256::from(share_balance)
-            + U256::from(self.total_staked_shares - 1))
-            / U256::from(self.total_staked_shares))
+            + U256::from(self.total_share_balance - 1))
+            / U256::from(self.total_share_balance))
         .as_u128()
     }
 }
@@ -208,11 +243,9 @@ impl RestakingBaseContract {
             .expect(format!("Failed to get staking pool by {}", pool_id).as_str())
     }
 
-    pub(crate) fn internal_save_staking_pool(
-        &mut self,
-        staking_pool: &StakingPool,
-    ) {
-        self.staking_pools.insert(&staking_pool.pool_id, &staking_pool);
+    pub(crate) fn internal_save_staking_pool(&mut self, staking_pool: &StakingPool) {
+        self.staking_pools
+            .insert(&staking_pool.pool_id, &staking_pool);
     }
 
     pub(crate) fn internal_use_staker_staking_pool_or_panic<F, R>(

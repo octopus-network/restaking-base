@@ -213,7 +213,7 @@ impl RestakingBaseContract {
         signer: &Account,
         consumer_chain_id: ConsumerChainId,
         limit: u32,
-    ) -> ValidaotrSet {
+    ) -> ValidatorSet {
         signer
             .view(&self.deploy_account.id(), "get_validator_set")
             .args_json(json!({ "consumer_chain_id": consumer_chain_id, "limit": limit }))
@@ -227,7 +227,7 @@ impl RestakingBaseContract {
         &self,
         signer: &Account,
         consumer_chain_id: ConsumerChainId,
-    ) -> Option<ConsumerChainView> {
+    ) -> Option<ConsumerChainInfo> {
         signer
             .view(&self.deploy_account.id(), "get_consumer_chain")
             .args_json(json!({ "consumer_chain_id": consumer_chain_id }))

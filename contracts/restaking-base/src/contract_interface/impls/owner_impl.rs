@@ -1,6 +1,6 @@
 use near_contract_standards::storage_management::StorageManagement;
 
-use crate::{*, contract_interface::owner::OwnerAction};
+use crate::{contract_interface::owner::OwnerAction, *};
 
 #[near_bindgen]
 impl OwnerAction for RestakingBaseContract {

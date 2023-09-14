@@ -1,6 +1,6 @@
 use crate::{
-    models::consumer_chain::ConsumerChainView,
-    types::{SlashId, ValidaotrSet},
+    models::consumer_chain::ConsumerChainInfo,
+    types::{SlashId, ValidatorSet, ValidatorSetInSequence},
 };
 
 use super::*;
@@ -30,23 +30,27 @@ pub trait ConsumerChainAction {
 }
 
 pub trait StakerRestakingAction {
-    fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) -> Promise;
+    fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String);
     fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool>;
-    fn unbond(&mut self, consumer_chain_id: ConsumerChainId) -> PromiseOrValue<bool>;
+    fn unbond(&mut self, consumer_chain_id: ConsumerChainId);
 }
 
-pub trait ReStakingCallBack {
+pub trait RestakingCallback {
     fn bond_callback(
         &mut self,
         consumer_chain_id: ConsumerChainId,
+        key: String,
         staker_id: AccountId,
-        success: bool,
     ) -> PromiseOrValue<bool>;
 }
 
-pub trait ReStakingView {
-    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainView>;
-    fn get_validator_set(&self, consumer_chain_id: ConsumerChainId, limit: u32) -> ValidaotrSet;
+pub trait RestakingView {
+    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainInfo>;
+    fn get_validator_set(
+        &self,
+        consumer_chain_id: ConsumerChainId,
+        limit: u32,
+    ) -> ValidatorSetInSequence;
     fn get_slash_guarantee(&self) -> U128;
     fn get_cc_register_fee(&self) -> U128;
     fn get_owner(&self) -> AccountId;

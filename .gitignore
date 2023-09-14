@@ -16,4 +16,5 @@ neardev/
 
 /.idea/
 package-lock.json
+.vscode
 

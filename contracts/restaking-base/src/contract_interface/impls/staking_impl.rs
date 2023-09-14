@@ -1,4 +1,4 @@
-use crate::{external::staking_pool, *};
+use crate::{external::staking_pool, types::Sequence, *};
 
 #[near_bindgen]
 impl StakerAction for RestakingBaseContract {
@@ -13,12 +13,6 @@ impl StakerAction for RestakingBaseContract {
             .get(&staker_id)
             .unwrap_or(Staker::new(staker_id.clone()));
 
-        log!(
-            "{:?}, new pool id: {:?}",
-            staker.select_staking_pool,
-            pool_id
-        );
-
         assert_eq!(staker.shares, 0, "Can't stake, shares is not zero");
         assert!(
             staker.select_staking_pool.is_none()
@@ -32,10 +26,6 @@ impl StakerAction for RestakingBaseContract {
         storage_manager
             .execute_in_storage_monitoring(|| self.internal_save_staker(&staker_id, &staker));
         self.internal_save_storage_manager(&staker_id, &storage_manager);
-
-        self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
-            staking_pool.lock()
-        });
 
         return ext_whitelist::ext(self.staking_pool_whitelist_account.clone())
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_IS_WHITELISTED))
@@ -174,12 +164,7 @@ impl StakerAction for RestakingBaseContract {
             .into();
     }
 
-    fn withdraw(
-        &mut self,
-        staker: AccountId,
-        id: WithdrawalCertificatetId,
-    ) -> PromiseOrValue<U128> {
-        log!("withdraw");
+    fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128> {
         let account = self.internal_get_account_or_panic(&staker);
         let pending_withdrawal = account.pending_withdrawals.get(&id).unwrap();
 
@@ -197,8 +182,8 @@ impl StakerAction for RestakingBaseContract {
 
 #[near_bindgen]
 impl StakeView for RestakingBaseContract {
-    fn get_staker(&self, staker_id: StakerId) -> Option<StakerView> {
-        self.stakers.get(&staker_id).map(|e| e.into())
+    fn get_staker(&self, staker_id: StakerId) -> Option<StakerInfo> {
+        self.stakers.get(&staker_id).map(|e| (&e).into())
     }
 
     fn get_pending_withdrawals(&self, account_id: AccountId) -> Vec<PendingWithdrawal> {
@@ -211,7 +196,7 @@ impl StakeView for RestakingBaseContract {
         staker_id: StakerId,
         skip: u32,
         limit: u32,
-    ) -> Vec<ConsumerChainView> {
+    ) -> Vec<ConsumerChainInfo> {
         self.stakers
             .get(&staker_id)
             .and_then(|staker| {
@@ -222,19 +207,19 @@ impl StakeView for RestakingBaseContract {
                         .skip(skip as usize)
                         .take(limit as usize)
                         .map(|chain_id| self.consumer_chains.get(&chain_id.0).unwrap())
-                        .map(ConsumerChainView::from)
+                        .map(ConsumerChainInfo::from)
                         .collect(),
                 )
             })
             .unwrap_or(vec![])
     }
 
-    fn get_staking_pool(&self, pool_id: PoolId) -> StakingPool {
-        self.internal_get_staking_pool_or_panic(&pool_id)
+    fn get_staking_pool(&self, pool_id: PoolId) -> StakingPoolInfo {
+        self.internal_get_staking_pool_or_panic(&pool_id).into()
     }
 
-    fn get_staking_pools(&self) -> Vec<StakingPool> {
-        self.staking_pools.values().collect_vec()
+    fn get_staking_pools(&self) -> Vec<StakingPoolInfo> {
+        self.staking_pools.values().map_into().collect_vec()
     }
 
     fn get_account_staked_balance(&self, account_id: AccountId) -> U128 {
@@ -243,14 +228,13 @@ impl StakeView for RestakingBaseContract {
 }
 
 #[near_bindgen]
-impl StakingCallBack for RestakingBaseContract {
+impl StakingCallback for RestakingBaseContract {
     #[private]
     fn withdraw_callback(
         &mut self,
         account_id: AccountId,
-        withdrawal_certificate: WithdrawalCertificatetId,
-    ) {
-        log!("withdraw_callback");
+        withdrawal_certificate: WithdrawalCertificate,
+    ) -> PromiseOrValue<U128> {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
@@ -264,9 +248,14 @@ impl StakingCallBack for RestakingBaseContract {
                     .unwrap();
                 self.internal_save_storage_manager(&account_id, &storage_manager);
                 self.transfer_near(pending_withdrawal.beneficiary, pending_withdrawal.amount);
+                Event::Withdraw {
+                    withdraw_certificate_id: &withdrawal_certificate,
+                }
+                .emit();
+                PromiseOrValue::Value(pending_withdrawal.amount.into())
             }
             PromiseResult::Failed => {
-                log!("{:?}", env::promise_result(0));
+                panic!("withdraw failed")
             }
         }
     }
@@ -287,7 +276,8 @@ impl StakingCallBack for RestakingBaseContract {
                 let staking_pool = self.internal_get_staking_pool_by_staker_or_panic(&staker_id);
 
                 let decrease_shares = staker.shares;
-                let receive_amount = staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+                let receive_amount =
+                    staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
                 staker.shares = 0;
                 self.internal_save_staker(&staker_id, &staker);
 
@@ -330,13 +320,16 @@ impl StakingCallBack for RestakingBaseContract {
                 panic!("Failed to decrease_stake because ping failed.")
             }
             PromiseResult::Successful(_) => {
-
                 let staker = self.internal_get_staker_or_panic(&staker_id);
                 let staking_pool = self.internal_get_staking_pool_by_staker_or_panic(&staker_id);
 
                 let decrease_shares = staking_pool.calculate_decrease_shares(decrease_amount.0);
-                let receive_amount = staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
-                staker.shares.checked_sub(decrease_shares).expect("Failed decrease shares in staker.");
+                let receive_amount =
+                    staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+                staker
+                    .shares
+                    .checked_sub(decrease_shares)
+                    .expect("Failed decrease shares in staker.");
 
                 self.internal_save_staker(&staker_id, &staker);
 
@@ -386,7 +379,7 @@ impl StakingCallBack for RestakingBaseContract {
                 let selected_pool_id = self.internal_get_staker_selected_pool_or_panic(&staker_id);
                 let mut staking_pool = self.internal_get_staking_pool_or_panic(&selected_pool_id);
                 staking_pool.total_staked_balance = new_total_staked_balance;
-                staking_pool.unstake(&staker_id, share_balance.0,new_total_staked_balance);
+                staking_pool.unstake(&staker_id, share_balance.0, new_total_staked_balance);
 
                 staking_pool.unlock();
 
@@ -399,11 +392,24 @@ impl StakingCallBack for RestakingBaseContract {
                 self.internal_save_staking_pool(&staking_pool);
                 self.internal_save_staker(&staker_id, &staker);
 
+                let sequence = U64(self.next_sequence());
+
+                Event::StakerUnstake {
+                    staking_pool_info: &(&mut staking_pool).into(),
+                    staker_info: &(&staker).into(),
+                    decrease_stake_amount: &receive_amount,
+                    decrease_shares: &share_balance,
+                    withdraw_certificate: &withdraw_certificate,
+                    sequence: &sequence,
+                }
+                .emit();
+
                 PromiseOrValue::Value(Some(StakingChangeResult {
-                    sequence: self.next_sequence().into(),
+                    sequence: sequence,
                     new_total_staked_balance: staking_pool
-                    .staked_amount_from_shares_balance_rounded_down(staker.shares)
-                    .into(),
+                        .staked_amount_from_shares_balance_rounded_down(staker.shares)
+                        .into(),
+                    withdrawal_certificate: Some(withdraw_certificate),
                 }))
             }
             PromiseResult::Failed => {
@@ -454,11 +460,23 @@ impl StakingCallBack for RestakingBaseContract {
                 self.internal_save_staking_pool(&staking_pool);
                 self.internal_save_staker(&staker_id, &staker);
 
+                let sequence = U64::from(self.next_sequence());
+                Event::StakerDecreaseStake {
+                    staking_pool_info: &(&mut staking_pool).into(),
+                    staker_info: &(&staker).into(),
+                    decrease_stake_amount: &decrease_amount,
+                    decrease_shares: &decrease_shares,
+                    withdraw_certificate: &withdraw_certificate,
+                    sequence: &sequence,
+                }
+                .emit();
+
                 PromiseOrValue::Value(Some(StakingChangeResult {
-                    sequence: self.next_sequence().into(),
+                    sequence: sequence,
                     new_total_staked_balance: staking_pool
                         .staked_amount_from_shares_balance_rounded_down(staker.shares)
                         .into(),
+                    withdrawal_certificate: None,
                 }))
             }
             PromiseResult::Failed => {
@@ -496,8 +514,11 @@ impl StakingCallBack for RestakingBaseContract {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
-                let pool_id: AccountId =
-                    self.internal_get_staker_selected_pool_or_panic(&staker_id);
+                let pool_id =
+                    self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+                        staking_pool.lock();
+                        staking_pool.pool_id.clone()
+                    });
 
                 ext_staking_pool::ext(pool_id)
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_DEPOSIT_AND_STAKE))
@@ -575,39 +596,58 @@ impl StakingCallBack for RestakingBaseContract {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(value) => {
-                let mut staker = self.internal_get_staker_or_panic(&staker_id);
-
-                let pool_id = &self.internal_get_staker_selected_pool_or_panic(&staker_id);
-                let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
-
-                let increase_shares = staking_pool.calculate_increase_shares(stake_amount.0);
-
                 let new_total_staked_balance = near_sdk::serde_json::from_slice::<U128>(&value)
                     .expect("Failed to deserialize in increase_stake_callback by value.")
                     .0;
 
-                staking_pool.stake(&mut staker, increase_shares, new_total_staked_balance);
-                staking_pool.unlock();
+                let mut staker = self.internal_get_staker_or_panic(&staker_id);
 
-                log!(
-                    " total balance: {}, total_shares: {}, staker.shares: {}, staker balance: {}",
-                    new_total_staked_balance,
-                    staking_pool.total_staked_shares,
-                    staker.shares,
-                    staking_pool.staked_amount_from_shares_balance_rounded_down(staker.shares)
-                );
+                // let pool_id = &self.internal_get_staker_selected_pool_or_panic(&staker_id);
+                // let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
 
+                // let increase_shares = staking_pool.calculate_increase_shares(stake_amount.0);
+
+                // staking_pool.stake(&mut staker, increase_shares, new_total_staked_balance);
+                // staking_pool.unlock();
+
+                // self.internal_save_staker(&staker_id, &staker);
+                // self.internal_save_staking_pool(&staking_pool);
+                let sequence = U64(self.next_sequence());
+
+                let staker_new_balance =
+                    self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+                        let increase_shares = staking_pool.stake(
+                            &mut staker,
+                            stake_amount.0,
+                            new_total_staked_balance,
+                        );
+                        staking_pool.unlock();
+
+                        Event::StakerStake {
+                            staking_pool_info: &staking_pool.into(),
+                            staker_info: &(&staker).into(),
+                            select_pool: &staking_pool.pool_id,
+                            stake_amount: &stake_amount,
+                            increase_shares: &increase_shares.into(),
+                            sequence: &sequence,
+                        }
+                        .emit();
+                        staking_pool.staked_amount_from_shares_balance_rounded_down(staker.shares)
+                    });
                 self.internal_save_staker(&staker_id, &staker);
-                self.internal_save_staking_pool(&staking_pool);
 
                 return PromiseOrValue::Value(Some(StakingChangeResult {
-                    sequence: self.next_sequence().into(),
-                    new_total_staked_balance: staking_pool
-                        .staked_amount_from_shares_balance_rounded_down(staker.shares)
-                        .into(),
+                    sequence,
+                    new_total_staked_balance: staker_new_balance.into(),
+                    withdrawal_certificate: None,
                 }));
             }
             PromiseResult::Failed => {
+                let mut staker = self.internal_get_staker_or_panic(&staker_id);
+                staker.select_staking_pool = None;
+                self.internal_use_staker_or_panic(&staker_id, |staker| {
+                    staker.select_staking_pool = None
+                });
                 self.internal_use_staker_staking_pool_or_panic(&staker_id, |pool| pool.unlock());
                 self.transfer_near(staker_id, stake_amount.0);
                 return PromiseOrValue::Value(None);
@@ -625,34 +665,43 @@ impl StakingCallBack for RestakingBaseContract {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(value) => {
-                let mut staker = self.internal_get_staker_or_panic(&staker_id);
-
-                let pool_id = &self.internal_get_staker_selected_pool_or_panic(&staker_id);
-                let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
-
                 let new_total_staked_balance = near_sdk::serde_json::from_slice::<U128>(&value)
                     .expect("Failed to deserialize in increase_stake_callback by value.")
                     .0;
 
-                staking_pool.increase_stake(&mut staker, increase_amount.0, new_total_staked_balance);
-                staking_pool.unlock();
+                let mut staker = self.internal_get_staker_or_panic(&staker_id);
+                let pool_id = staker.select_staking_pool.clone().unwrap();
 
-                log!(
-                    " total balance: {}, total_shares: {}, staker.shares: {}, staker balance: {}",
+                // let pool_id = &self.internal_get_staker_selected_pool_or_panic(&staker_id);
+                let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
+
+                let increase_shares = staking_pool.increase_stake(
+                    &mut staker,
+                    increase_amount.0,
                     new_total_staked_balance,
-                    staking_pool.total_staked_shares,
-                    staker.shares,
-                    staking_pool.staked_amount_from_shares_balance_rounded_down(staker.shares)
                 );
+                staking_pool.unlock();
 
                 self.internal_save_staker(&staker_id, &staker);
                 self.internal_save_staking_pool(&staking_pool);
 
+                let sequence = U64(self.next_sequence());
+
+                Event::StakerIncreaseStake {
+                    staking_pool_info: &(&mut staking_pool).into(),
+                    staker_info: &(&staker).into(),
+                    increase_stake_amount: &increase_amount,
+                    increase_shares: &increase_shares.into(),
+                    sequence: &sequence,
+                }
+                .emit();
+
                 return PromiseOrValue::Value(Some(StakingChangeResult {
-                    sequence: self.next_sequence().into(),
+                    sequence,
                     new_total_staked_balance: staking_pool
                         .staked_amount_from_shares_balance_rounded_down(staker.shares)
                         .into(),
+                    withdrawal_certificate: None,
                 }));
             }
             PromiseResult::Failed => {
@@ -680,6 +729,7 @@ impl StakingCallBack for RestakingBaseContract {
 
         if !self.staking_pools.get(&pool_id).is_some() {
             self.internal_save_staking_pool(&StakingPool::new(pool_id.clone(), staker_id.clone()));
+            Event::SaveStakingPool { pool_id: &pool_id }.emit();
         }
 
         let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker_id);
@@ -709,6 +759,12 @@ impl StakingCallBack for RestakingBaseContract {
         self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
             staking_pool.total_staked_balance = staked_balance.0;
         });
+
+        Event::Ping {
+            pool_id: &pool_id,
+            new_total_staked_balance: &staked_balance,
+        }
+        .emit();
     }
 }
 
@@ -719,7 +775,7 @@ impl RestakingBaseContract {
         beneficiary: AccountId,
         amount: Balance,
         pool_id: PoolId,
-    ) -> WithdrawalCertificatetId {
+    ) -> WithdrawalCertificate {
         let pending_withdrawal = PendingWithdrawal::new(
             self.next_uuid().into(),
             pool_id,
@@ -829,7 +885,7 @@ impl RestakingBaseContract {
             increase_shares > 0,
             "The calculated number of increase stake shares should be positive, increase amount: {}, total_staked_shares: {}, total_staked_balance: {}",
             increase_stake_amount,
-            staking_pool.total_staked_shares,staking_pool.total_staked_balance
+            staking_pool.total_share_balance,staking_pool.total_staked_balance
         );
 
         // The amount of tokens the account will be charged from the unstaked balance.

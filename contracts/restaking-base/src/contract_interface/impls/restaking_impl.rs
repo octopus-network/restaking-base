@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{types::ValidatorSetInSequence, *};
 
 #[near_bindgen]
 impl ConsumerChainAction for RestakingBaseContract {
@@ -29,6 +29,13 @@ impl ConsumerChainAction for RestakingBaseContract {
 
         let slash_id = U64(self.next_uuid());
 
+        Event::RequestSlash {
+            consumer_chain_id: &consumer_chain_id,
+            slash_items: &near_sdk::serde_json::to_string(&slash_items).unwrap(),
+            evidence_sha256_hash: &evidence_sha256_hash,
+        }
+        .emit();
+
         // needn't check storage, the slash guarantee should able to cover storage.
         self.slashes.insert(
             &slash_id,
@@ -39,6 +46,7 @@ impl ConsumerChainAction for RestakingBaseContract {
                 slash_guarantee: self.slash_guarantee.into(),
             },
         );
+
         slash_id
     }
 }
@@ -67,15 +75,20 @@ impl GovernanceAction for RestakingBaseContract {
         validate_chain_id(&register_param.consumer_chain_id);
 
         let consumer_chain = ConsumerChain::new_from_register_param(
-            register_param,
+            register_param.clone(),
             env::predecessor_account_id(),
             self.cc_register_fee,
         );
 
         // needn't check storage, the register fee should able to cover storage.
-
         self.consumer_chains
             .insert(&consumer_chain.consumer_chain_id, &consumer_chain);
+
+        Event::RegisterConsumerChain {
+            consumer_chain_info: &consumer_chain.into(),
+            consumer_chain_register_param: &register_param,
+        }
+        .emit();
     }
 
     #[payable]
@@ -83,10 +96,15 @@ impl GovernanceAction for RestakingBaseContract {
         // todo how to clean consumer chain state?
 
         assert_one_yocto();
-        self.internal_use_consumer_chain_or_panic(&consumer_chain_id, |consumer_chain| {
-            consumer_chain.assert_cc_gov();
-            consumer_chain.status = ConsumerChainStatus::Deregistered;
-        });
+
+        let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
+        consumer_chain.assert_cc_gov();
+        consumer_chain.status = ConsumerChainStatus::Deregistered;
+        self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
+        Event::DeregisterConsumerChain {
+            consumer_chain_info: &consumer_chain.into(),
+        }
+        .emit();
     }
 
     #[payable]
@@ -111,9 +129,15 @@ impl GovernanceAction for RestakingBaseContract {
             consumer_chain.governance
         );
 
-        consumer_chain.update(update_param);
+        consumer_chain.update(update_param.clone());
         self.consumer_chains
             .insert(&consumer_chain_id, &consumer_chain);
+
+        Event::UpdateConsumerChain {
+            consumer_chain_info: &consumer_chain.into(),
+            consumer_chain_update_param: &update_param,
+        }
+        .emit();
     }
 
     #[payable]
@@ -154,13 +178,11 @@ impl GovernanceAction for RestakingBaseContract {
 impl StakerRestakingAction for RestakingBaseContract {
     #[payable]
     fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool> {
-        log!("bond");
         assert_one_yocto();
 
         let staker_id = env::predecessor_account_id();
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
-
         let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker.staker_id);
 
         storage_manager.execute_in_storage_monitoring(|| {
@@ -173,24 +195,22 @@ impl StakerRestakingAction for RestakingBaseContract {
             self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
         });
 
-        // self.internal_bond(&mut staker, &mut consumer_chain);
-
         self.ping(Option::None)
             .then(
                 ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_CHANGE_KEY))
-                    .bond(staker_id.clone(), key),
+                    .bond(staker_id.clone(), key.clone()),
             )
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_BOND_CALLBACK))
-                    .bond_callback(consumer_chain_id, staker_id),
+                    .bond_callback(consumer_chain_id, key, staker_id),
             )
             .into()
     }
 
     #[payable]
-    fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) -> Promise {
+    fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) {
         assert_one_yocto();
 
         // 1. check if bonding
@@ -208,11 +228,11 @@ impl StakerRestakingAction for RestakingBaseContract {
 
         ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_CHANGE_KEY))
-            .change_key(staker.staker_id, new_key)
+            .change_key(staker.staker_id, new_key);
     }
 
     #[payable]
-    fn unbond(&mut self, consumer_chain_id: ConsumerChainId) -> PromiseOrValue<bool> {
+    fn unbond(&mut self, consumer_chain_id: ConsumerChainId) {
         assert_one_yocto();
         let staker_id = env::predecessor_account_id();
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
@@ -224,42 +244,55 @@ impl StakerRestakingAction for RestakingBaseContract {
             staker.unbond(&consumer_chain.consumer_chain_id);
         });
         self.internal_save_storage_manager(&staker_id, &storage_manager);
-        PromiseOrValue::Value(true)
     }
 }
 
 #[near_bindgen]
-impl ReStakingCallBack for RestakingBaseContract {
+impl RestakingCallback for RestakingBaseContract {
     #[private]
     fn bond_callback(
         &mut self,
         consumer_chain_id: ConsumerChainId,
+        key: String,
         staker_id: AccountId,
-        #[callback] success: bool,
     ) -> PromiseOrValue<bool> {
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
-        if !success {
-            self.internal_rollback_bond(&mut staker, &mut consumer_chain);
-            return PromiseOrValue::Value(false);
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Failed => {
+                self.internal_rollback_bond(&mut staker, &mut consumer_chain);
+                PromiseOrValue::Value(false)
+            }
+            PromiseResult::Successful(_) => {
+                Event::StakerBond {
+                    staker_id: &staker_id,
+                    consumer_chain_id: &consumer_chain_id,
+                    key: &key,
+                }
+                .emit();
+                PromiseOrValue::Value(true)
+            }
         }
-
-        PromiseOrValue::Value(true)
     }
 }
 
 #[near_bindgen]
-impl ReStakingView for RestakingBaseContract {
-    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainView> {
+impl RestakingView for RestakingBaseContract {
+    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainInfo> {
         self.consumer_chains
             .get(&consumer_chain_id)
-            .map(ConsumerChainView::from)
+            .map(ConsumerChainInfo::from)
     }
 
-    fn get_validator_set(&self, consumer_chain_id: ConsumerChainId, limit: u32) -> ValidaotrSet {
+    fn get_validator_set(
+        &self,
+        consumer_chain_id: ConsumerChainId,
+        limit: u32,
+    ) -> ValidatorSetInSequence {
         let consumer_chains = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
 
-        consumer_chains
+        let validator_set = consumer_chains
             .bonding_stakers
             .iter()
             .map(|staker_id| {
@@ -268,7 +301,13 @@ impl ReStakingView for RestakingBaseContract {
                     U128(self.get_staker_staked_balance(&staker_id)),
                 )
             })
-            .collect_vec()
+            .sorted_by(|a, b| Ord::cmp(&b.1, &a.1))
+            .take(limit as usize)
+            .collect_vec();
+        ValidatorSetInSequence {
+            validator_set: validator_set,
+            sequence: self.sequence.into(),
+        }
     }
 
     fn get_slash_guarantee(&self) -> U128 {

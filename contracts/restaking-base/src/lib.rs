@@ -1,10 +1,12 @@
 pub mod constants;
 pub mod contract_interface;
+pub mod events;
 pub mod external;
 pub mod models;
 pub mod types;
 pub mod utils;
 
+use crate::events::*;
 use crate::models::account::*;
 use crate::models::consumer_chain::ConsumerChain;
 use crate::models::consumer_chain::*;
@@ -30,18 +32,18 @@ use near_sdk::{
     PanicOnDefault, Promise, StorageUsage,
 };
 use near_sdk::{log, PromiseOrValue};
-use types::{ConsumerChainId, PoolId, SlashId, StakerId, WithdrawalCertificatetId};
+use types::{ConsumerChainId, PoolId, SlashId, StakerId, WithdrawalCertificate};
 
 use crate::constants::gas_constants::*;
 use crate::external::consumer_chain_pos::ext_consumer_chain_pos;
 use crate::{
     constants::NUM_EPOCHS_TO_UNLOCK,
-    contract_interface::staking::{StakeView, StakerAction, StakingCallBack},
+    contract_interface::staking::{StakeView, StakerAction, StakingCallback},
     external::staking_pool_whitelist::ext_whitelist,
     types::ShareBalance,
 };
 use crate::{
-    contract_interface::restaking::*, external::staking_pool::ext_staking_pool, types::ValidaotrSet,
+    contract_interface::restaking::*, external::staking_pool::ext_staking_pool, types::ValidatorSet,
 };
 use itertools::Itertools;
 use near_sdk::Gas;
@@ -53,18 +55,29 @@ use std::ops::Mul;
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct RestakingBaseContract {
+    /// The owner of contract
     pub owner: AccountId,
+    /// Universally Unique Identifier for some entity
     pub uuid: u64,
+    /// Any staking change action will make sequence increase
     pub sequence: u64,
+    /// The map from account id to staker struct
     pub stakers: LookupMap<AccountId, Staker>,
-    // todo 如果一个pool从白名单移除， 需要处理
+    /// The map from pool account id to staking pool struct
     pub staking_pools: UnorderedMap<PoolId, StakingPool>,
+    /// The map from consumer chain id to consumer chain struct
     pub consumer_chains: UnorderedMap<ConsumerChainId, ConsumerChain>,
+    /// The fee of register consumer chain
     pub cc_register_fee: Balance,
+    /// The staking pool whitelist account
     pub staking_pool_whitelist_account: AccountId,
+    /// The guarantee of slash
     pub slash_guarantee: Balance,
+    /// The map from slash id to slash struct
     pub slashes: LookupMap<SlashId, Slash>,
+    /// The map from account id to account struct
     pub accounts: LookupMap<AccountId, Account>,
+    /// The map from account id to storage manager struct
     pub storage_managers: LookupMap<AccountId, StorageManager>,
 }
 
