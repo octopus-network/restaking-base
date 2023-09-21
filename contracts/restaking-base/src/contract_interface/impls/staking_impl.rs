@@ -100,7 +100,6 @@ impl StakerAction for RestakingBaseContract {
         decrease_amount: U128,
         beneficiary: Option<AccountId>,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
-        log!("decrease_stake, gas: {:?}", env::prepaid_gas());
         assert_one_yocto();
         assert!(decrease_amount.0 > 0, "The decrease amount should gt 0");
 
@@ -167,6 +166,7 @@ impl StakerAction for RestakingBaseContract {
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128> {
         let account = self.internal_get_account_or_panic(&staker);
         let pending_withdrawal = account.pending_withdrawals.get(&id).unwrap();
+        assert!(pending_withdrawal.is_withdrawable());
 
         ext_staking_pool::ext(pending_withdrawal.pool_id.clone())
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_WITHDRAW))
@@ -225,6 +225,14 @@ impl StakeView for RestakingBaseContract {
     fn get_account_staked_balance(&self, account_id: AccountId) -> U128 {
         self.get_staker_staked_balance(&account_id).into()
     }
+
+    fn is_withdrawable(&self, staker_id: StakerId, certificate: WithdrawalCertificate) -> bool {
+        self.internal_get_account_or_panic(&staker_id)
+            .pending_withdrawals
+            .get(&certificate)
+            .unwrap()
+            .is_withdrawable()
+    }
 }
 
 #[near_bindgen]
@@ -249,7 +257,7 @@ impl StakingCallback for RestakingBaseContract {
                 self.internal_save_storage_manager(&account_id, &storage_manager);
                 self.transfer_near(pending_withdrawal.beneficiary, pending_withdrawal.amount);
                 Event::Withdraw {
-                    withdraw_certificate_id: &withdrawal_certificate,
+                    withdrawal_certificate: &withdrawal_certificate,
                 }
                 .emit();
                 PromiseOrValue::Value(pending_withdrawal.amount.into())
@@ -320,13 +328,13 @@ impl StakingCallback for RestakingBaseContract {
                 panic!("Failed to decrease_stake because ping failed.")
             }
             PromiseResult::Successful(_) => {
-                let staker = self.internal_get_staker_or_panic(&staker_id);
+                let mut staker = self.internal_get_staker_or_panic(&staker_id);
                 let staking_pool = self.internal_get_staking_pool_by_staker_or_panic(&staker_id);
 
                 let decrease_shares = staking_pool.calculate_decrease_shares(decrease_amount.0);
                 let receive_amount =
                     staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
-                staker
+                staker.shares = staker
                     .shares
                     .checked_sub(decrease_shares)
                     .expect("Failed decrease shares in staker.");
@@ -383,7 +391,7 @@ impl StakingCallback for RestakingBaseContract {
 
                 staking_pool.unlock();
 
-                let withdraw_certificate = self.internal_create_pending_withdrawal_in_staker(
+                let pending_withdrawal = self.internal_create_pending_withdrawal_in_staker(
                     &mut staker,
                     beneficiary,
                     receive_amount.0,
@@ -399,7 +407,7 @@ impl StakingCallback for RestakingBaseContract {
                     staker_info: &(&staker).into(),
                     decrease_stake_amount: &receive_amount,
                     decrease_shares: &share_balance,
-                    withdraw_certificate: &withdraw_certificate,
+                    pending_withdrawal: &pending_withdrawal,
                     sequence: &sequence,
                 }
                 .emit();
@@ -409,7 +417,7 @@ impl StakingCallback for RestakingBaseContract {
                     new_total_staked_balance: staking_pool
                         .staked_amount_from_shares_balance_rounded_down(staker.shares)
                         .into(),
-                    withdrawal_certificate: Some(withdraw_certificate),
+                    withdrawal_certificate: Some(pending_withdrawal.withdrawal_certificate),
                 }))
             }
             PromiseResult::Failed => {
@@ -451,7 +459,7 @@ impl StakingCallback for RestakingBaseContract {
                 staking_pool.decrease_stake(decrease_shares.0, new_total_staked_balance);
                 staking_pool.unlock();
 
-                let withdraw_certificate = self.internal_create_pending_withdrawal_in_staker(
+                let pending_withdrawal = self.internal_create_pending_withdrawal_in_staker(
                     &mut staker,
                     beneficiary,
                     decrease_amount.0,
@@ -466,7 +474,7 @@ impl StakingCallback for RestakingBaseContract {
                     staker_info: &(&staker).into(),
                     decrease_stake_amount: &decrease_amount,
                     decrease_shares: &decrease_shares,
-                    withdraw_certificate: &withdraw_certificate,
+                    pending_withdrawal: &pending_withdrawal,
                     sequence: &sequence,
                 }
                 .emit();
@@ -775,13 +783,13 @@ impl RestakingBaseContract {
         beneficiary: AccountId,
         amount: Balance,
         pool_id: PoolId,
-    ) -> WithdrawalCertificate {
+    ) -> PendingWithdrawal {
         let pending_withdrawal = PendingWithdrawal::new(
             self.next_uuid().into(),
             pool_id,
             amount,
             env::epoch_height() + NUM_EPOCHS_TO_UNLOCK,
-            env::block_timestamp() + self.get_staker_unlock_time(&staker.staker_id.clone()),
+            staker.get_unlock_time(),
             beneficiary,
         );
 
@@ -796,15 +804,7 @@ impl RestakingBaseContract {
             });
         });
 
-        pending_withdrawal.withdrawal_certificate
-    }
-
-    pub(crate) fn get_staker_unlock_time(&self, staker_id: &StakerId) -> Timestamp {
-        let staker = self.internal_get_staker_or_panic(staker_id);
-        max(
-            staker.max_bonding_unlock_period,
-            staker.unbonding_unlock_time,
-        )
+        pending_withdrawal
     }
 
     pub(crate) fn internal_get_staker_selected_pool_or_panic(

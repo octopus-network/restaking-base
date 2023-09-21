@@ -2,6 +2,7 @@ use std::cmp::max;
 
 use crate::types::{DurationOfSeconds, PoolId, Sequence, ShareBalance};
 use crate::*;
+use near_sdk::Duration;
 use near_sdk::{collections::UnorderedSet, Timestamp};
 
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -15,7 +16,7 @@ pub struct Staker {
     /// The map from consumer chain id to unbonding period
     pub bonding_consumer_chains: UnorderedMap<ConsumerChainId, DurationOfSeconds>,
     /// The max period of bonding unlock
-    pub max_bonding_unlock_period: Timestamp,
+    pub max_bonding_unlock_period: Duration,
     /// If execute unbond it'll record unlock time
     pub unbonding_unlock_time: Timestamp,
 }
@@ -43,7 +44,10 @@ impl Staker {
             env::block_timestamp()
         );
 
-        self.max_bonding_unlock_period = max(self.max_bonding_unlock_period, unbond_period);
+        self.max_bonding_unlock_period = max(
+            self.max_bonding_unlock_period,
+            seconds_to_nanoseconds(unbond_period),
+        );
         self.bonding_consumer_chains
             .insert(consumer_chain_id, &unbond_period);
     }
@@ -71,6 +75,13 @@ impl Staker {
             .map(|e| e.1)
             .max()
             .unwrap_or(0);
+    }
+
+    pub fn get_unlock_time(&self) -> Timestamp {
+        max(
+            self.unbonding_unlock_time,
+            env::block_timestamp() + self.max_bonding_unlock_period,
+        )
     }
 }
 

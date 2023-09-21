@@ -1,7 +1,7 @@
 use crate::{types::Sequence, *};
 
 pub const EVENT_STANDARD: &str = "restaking-base";
-pub const EVENT_STANDARD_VERSION: &str = "1.0.0";
+pub const EVENT_STANDARD_VERSION: &str = "1.1.0";
 
 #[derive(Serialize)]
 #[serde(
@@ -43,7 +43,7 @@ pub enum Event<'a> {
         staker_info: &'a StakerInfo,
         decrease_stake_amount: &'a U128,
         decrease_shares: &'a U128,
-        withdraw_certificate: &'a U64,
+        pending_withdrawal: &'a PendingWithdrawal,
         sequence: &'a U64,
     },
 
@@ -52,7 +52,7 @@ pub enum Event<'a> {
         staker_info: &'a StakerInfo,
         decrease_stake_amount: &'a U128,
         decrease_shares: &'a U128,
-        withdraw_certificate: &'a U64,
+        pending_withdrawal: &'a PendingWithdrawal,
         sequence: &'a U64,
     },
 
@@ -90,7 +90,7 @@ pub enum Event<'a> {
         evidence_sha256_hash: &'a String,
     },
     Withdraw {
-        withdraw_certificate_id: &'a WithdrawalCertificate,
+        withdrawal_certificate: &'a WithdrawalCertificate,
     },
 }
 

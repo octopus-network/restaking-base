@@ -30,6 +30,8 @@ pub trait StakeView {
     fn get_staking_pools(&self) -> Vec<StakingPoolInfo>;
 
     fn get_account_staked_balance(&self, account_id: AccountId) -> U128;
+
+    fn is_withdrawable(&self, staker_id: StakerId, certificate: WithdrawalCertificate) -> bool;
 }
 
 pub trait StakingCallback {
