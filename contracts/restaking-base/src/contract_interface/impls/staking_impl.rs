@@ -22,10 +22,7 @@ impl StakerAction for RestakingBaseContract {
             pool_id
         );
 
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker_id);
-        storage_manager
-            .execute_in_storage_monitoring(|| self.internal_save_staker(&staker_id, &staker));
-        self.internal_save_storage_manager(&staker_id, &storage_manager);
+        self.internal_save_staker(&staker_id, &staker);
 
         return ext_whitelist::ext(self.staking_pool_whitelist_account.clone())
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_IS_WHITELISTED))
@@ -100,7 +97,7 @@ impl StakerAction for RestakingBaseContract {
         decrease_amount: U128,
         beneficiary: Option<AccountId>,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
-        assert_one_yocto();
+        self.assert_attached_storage_fee();
         assert!(decrease_amount.0 > 0, "The decrease amount should gt 0");
 
         let staker_id = env::predecessor_account_id();
@@ -125,29 +122,22 @@ impl StakerAction for RestakingBaseContract {
 
     #[payable]
     fn unstake(&mut self) -> PromiseOrValue<Option<StakingChangeResult>> {
-        assert_one_yocto();
+        self.assert_attached_storage_fee();
         let staker_id = env::predecessor_account_id();
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker_id);
-        storage_manager.execute_in_storage_monitoring(|| {
-            let mut staker = self.internal_get_staker_or_panic(&staker_id);
-            let bonding_consumer_chain_ids = staker
-                .bonding_consumer_chains
-                .iter()
-                .map(|e| e.0)
-                .collect_vec();
-            for bonding_consumer_chain_id in bonding_consumer_chain_ids {
-                // consumer_chain.unbond(&staker.staker_id);
-                // staker.unbond(&consumer_chain.consumer_chain_id);
-                let mut consumer_chain =
-                    self.internal_get_consumer_chain_or_panic(&bonding_consumer_chain_id);
-                consumer_chain.unbond(&staker.staker_id);
-                staker.unbond(&consumer_chain.consumer_chain_id);
-                // self.internal_unbond(&mut staker, &mut consumer_chain);
-                self.internal_save_consumer_chain(&bonding_consumer_chain_id, &consumer_chain);
-            }
-            self.internal_save_staker(&staker_id, &staker);
-        });
-        self.internal_save_storage_manager(&staker_id, &storage_manager);
+        let mut staker = self.internal_get_staker_or_panic(&staker_id);
+        let bonding_consumer_chain_ids = staker
+            .bonding_consumer_chains
+            .iter()
+            .map(|e| e.0)
+            .collect_vec();
+        for bonding_consumer_chain_id in bonding_consumer_chain_ids {
+            let mut consumer_chain =
+                self.internal_get_consumer_chain_or_panic(&bonding_consumer_chain_id);
+            consumer_chain.unbond(&staker.staker_id);
+            staker.unbond(&consumer_chain.consumer_chain_id);
+            self.internal_save_consumer_chain(&bonding_consumer_chain_id, &consumer_chain);
+        }
+        self.internal_save_staker(&staker_id, &staker);
 
         self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
             staking_pool.lock()
@@ -166,7 +156,14 @@ impl StakerAction for RestakingBaseContract {
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128> {
         let account = self.internal_get_account_or_panic(&staker);
         let pending_withdrawal = account.pending_withdrawals.get(&id).unwrap();
-        assert!(pending_withdrawal.is_withdrawable());
+        assert!(
+            pending_withdrawal.is_withdrawable(),
+            "unlock timestamp:{}, unlock epoch:{}, current timestamp:{}, current epoch: {} ",
+            pending_withdrawal.unlock_time,
+            pending_withdrawal.unlock_epoch,
+            env::block_timestamp(),
+            env::epoch_height()
+        );
 
         ext_staking_pool::ext(pending_withdrawal.pool_id.clone())
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_WITHDRAW))
@@ -246,15 +243,11 @@ impl StakingCallback for RestakingBaseContract {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
-                let mut storage_manager = self.internal_get_storage_manager_or_panic(&account_id);
-                let pending_withdrawal = storage_manager
-                    .execute_in_storage_monitoring(|| {
-                        self.internal_use_account(&account_id, |account| {
-                            account.pending_withdrawals.remove(&withdrawal_certificate)
-                        })
+                let pending_withdrawal = self
+                    .internal_use_account(&account_id, |account| {
+                        account.pending_withdrawals.remove(&withdrawal_certificate)
                     })
                     .unwrap();
-                self.internal_save_storage_manager(&account_id, &storage_manager);
                 self.transfer_near(pending_withdrawal.beneficiary, pending_withdrawal.amount);
                 Event::Withdraw {
                     withdrawal_certificate: &withdrawal_certificate,
@@ -740,14 +733,9 @@ impl StakingCallback for RestakingBaseContract {
             Event::SaveStakingPool { pool_id: &pool_id }.emit();
         }
 
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker_id);
-        storage_manager.execute_in_storage_monitoring(|| {
-            self.internal_use_staker_or_panic(&staker_id, |staker| {
-                staker.select_staking_pool = Some(pool_id.clone());
-                log!("{} select pool{}.", staker_id, pool_id);
-            });
+        self.internal_use_staker_or_panic(&staker_id, |staker| {
+            staker.select_staking_pool = Some(pool_id.clone());
         });
-        self.internal_save_storage_manager(&staker_id, &storage_manager);
 
         self.ping(Some(pool_id))
             .then(
@@ -793,15 +781,11 @@ impl RestakingBaseContract {
             beneficiary,
         );
 
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker.staker_id);
-
-        storage_manager.execute_in_storage_monitoring(|| {
-            self.internal_use_account(&staker.staker_id, |account| {
-                account.pending_withdrawals.insert(
-                    &pending_withdrawal.withdrawal_certificate,
-                    &pending_withdrawal,
-                );
-            });
+        self.internal_use_account(&staker.staker_id, |account| {
+            account.pending_withdrawals.insert(
+                &pending_withdrawal.withdrawal_certificate,
+                &pending_withdrawal,
+            );
         });
 
         pending_withdrawal

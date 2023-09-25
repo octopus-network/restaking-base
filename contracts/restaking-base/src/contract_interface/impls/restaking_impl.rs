@@ -178,22 +178,19 @@ impl GovernanceAction for RestakingBaseContract {
 impl StakerRestakingAction for RestakingBaseContract {
     #[payable]
     fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool> {
-        assert_one_yocto();
+        self.assert_attached_storage_fee();
 
         let staker_id = env::predecessor_account_id();
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker.staker_id);
 
-        storage_manager.execute_in_storage_monitoring(|| {
-            staker.bond(
-                &consumer_chain.consumer_chain_id,
-                consumer_chain.unbond_period,
-            );
-            consumer_chain.bond(&staker.staker_id);
-            self.internal_save_staker(&staker_id, &staker);
-            self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
-        });
+        staker.bond(
+            &consumer_chain.consumer_chain_id,
+            consumer_chain.unbond_period,
+        );
+        consumer_chain.bond(&staker.staker_id);
+        self.internal_save_staker(&staker_id, &staker);
+        self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
 
         self.ping(Option::None)
             .then(
@@ -235,15 +232,10 @@ impl StakerRestakingAction for RestakingBaseContract {
     fn unbond(&mut self, consumer_chain_id: ConsumerChainId) {
         assert_one_yocto();
         let staker_id = env::predecessor_account_id();
-        let mut staker = self.internal_get_staker_or_panic(&staker_id);
-        let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
-
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker_id);
-        storage_manager.execute_in_storage_monitoring(|| {
-            consumer_chain.unbond(&staker.staker_id);
-            staker.unbond(&consumer_chain.consumer_chain_id);
+        self.internal_use_staker_or_panic(&staker_id, |staker| staker.unbond(&consumer_chain_id));
+        self.internal_use_consumer_chain_or_panic(&consumer_chain_id, |consumer_chain| {
+            consumer_chain.unbond(&staker_id)
         });
-        self.internal_save_storage_manager(&staker_id, &storage_manager);
     }
 }
 
@@ -261,7 +253,10 @@ impl RestakingCallback for RestakingBaseContract {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Failed => {
-                self.internal_rollback_bond(&mut staker, &mut consumer_chain);
+                consumer_chain.unbond(&staker.staker_id);
+                staker.unbond(&consumer_chain.consumer_chain_id);
+                self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
+                self.internal_save_staker(&staker_id, &staker);
                 PromiseOrValue::Value(false)
             }
             PromiseResult::Successful(_) => {
@@ -423,18 +418,5 @@ impl RestakingBaseContract {
                     ),
             );
         actul_slash_amount
-    }
-
-    pub(crate) fn internal_rollback_bond(
-        &mut self,
-        staker: &mut Staker,
-        consumer_chain: &mut ConsumerChain,
-    ) {
-        let mut storage_manager = self.internal_get_storage_manager_or_panic(&staker.staker_id);
-        storage_manager.execute_in_storage_monitoring(|| {
-            consumer_chain.unbond(&staker.staker_id);
-            staker.unbond(&consumer_chain.consumer_chain_id);
-        });
-        self.internal_save_storage_manager(&staker.staker_id, &storage_manager);
     }
 }

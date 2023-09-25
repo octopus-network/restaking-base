@@ -1,6 +1,6 @@
 use near_contract_standards::storage_management::StorageManagement;
 
-use crate::{contract_interface::owner::OwnerAction, *};
+use crate::{constants::STORAGE_FEE, contract_interface::owner::OwnerAction, *};
 
 #[near_bindgen]
 impl OwnerAction for RestakingBaseContract {
@@ -60,6 +60,15 @@ impl RestakingBaseContract {
             self.owner,
             env::predecessor_account_id(),
             "Predecessor should be owner!"
+        );
+    }
+
+    pub(crate) fn assert_attached_storage_fee(&self) {
+        assert_eq!(
+            env::attached_deposit(),
+            STORAGE_FEE,
+            "Should attach {} near as storage fee.",
+            STORAGE_FEE
         );
     }
 }

@@ -16,29 +16,6 @@ impl StorageManager {
         }
     }
 
-    pub(crate) fn execute_in_storage_monitoring<F, R>(&mut self, mut f: F) -> R
-    where
-        F: FnMut() -> R,
-    {
-        // let usage_before_execute = env::storage_usage();
-        let r = f();
-        // let usage_after_execute = env::storage_usage();
-
-        // if usage_after_execute >= usage_before_execute {
-        //     self.storage_usage += usage_after_execute - usage_before_execute;
-        // } else {
-        //     self.storage_usage -= usage_before_execute - usage_after_execute;
-        // }
-
-        // assert!(
-        //     self.storage_cost() <= self.near_amount_for_storage,
-        //     "The the storage cost({}) is great than storage deposit ({}).",
-        //     self.storage_cost(),
-        //     self.near_amount_for_storage
-        // );
-        r
-    }
-
     pub fn storage_usage(&self) -> u64 {
         self.storage_usage
     }
