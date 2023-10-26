@@ -34,6 +34,13 @@ impl RestakingBaseContract {
             .expect(format!("Failed to get account by {}", account_id).as_str())
     }
 
+    pub(crate) fn internal_get_account_or_new(&self, account_id: &AccountId) -> Account {
+        self.accounts
+            .get(account_id)
+            .unwrap_or(Account::new(account_id.clone()))
+            // .expect(format!("Failed to get account by {}", account_id).as_str())
+    }
+
     pub(crate) fn internal_save_account(&mut self, account_id: &AccountId, account: &Account) {
         self.accounts.insert(account_id, account);
     }

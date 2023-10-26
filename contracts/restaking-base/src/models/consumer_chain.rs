@@ -20,7 +20,7 @@ pub struct ConsumerChain {
     pub governance: AccountId,
     /// The set of bonding stakers' ids
     pub bonding_stakers: UnorderedSet<StakerId>,
-    /// The account id of treasury, the slash  
+    /// The account id of treasury, the slash token will send to this account.  
     pub treasury: AccountId,
     pub status: ConsumerChainStatus,
     pub pos_account_id: AccountId,

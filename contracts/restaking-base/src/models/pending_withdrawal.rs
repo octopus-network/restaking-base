@@ -14,6 +14,7 @@ pub struct PendingWithdrawal {
     #[serde(with = "u64_dec_format")]
     pub unlock_time: Timestamp,
     pub beneficiary: AccountId,
+    pub allow_other_withdraw: bool,
 }
 
 impl PendingWithdrawal {
@@ -24,6 +25,7 @@ impl PendingWithdrawal {
         unlock_epoch: EpochHeight,
         unlock_time: Timestamp,
         beneficiary: AccountId,
+        allow_other_withdraw: bool,
     ) -> PendingWithdrawal {
         Self {
             withdrawal_certificate,
@@ -32,6 +34,7 @@ impl PendingWithdrawal {
             unlock_epoch,
             unlock_time,
             beneficiary,
+            allow_other_withdraw
         }
     }
 
@@ -58,6 +61,7 @@ impl PendingWithdrawal {
             unlock_epoch: self.unlock_epoch,
             unlock_time: env::block_timestamp(),
             beneficiary,
+            allow_other_withdraw: false
         }
     }
 }

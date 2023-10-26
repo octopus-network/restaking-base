@@ -164,7 +164,7 @@ impl GovernanceAction for RestakingBaseContract {
                 self.internal_slash(
                     &slash_item.0,
                     slash_item.1.into(),
-                    &consumer_chain.governance,
+                    &consumer_chain.treasury,
                 );
                 // todo log
             }
@@ -323,20 +323,20 @@ impl RestakingBaseContract {
         &mut self,
         slash_staker_id: &StakerId,
         slash_amount: Balance,
-        governance: &AccountId,
+        treasury: &AccountId,
     ) -> Balance {
         let staker = self.internal_get_staker_or_panic(slash_staker_id);
 
         // 1. staker pending withdrawals
         let slashed_amount_from_pending_withdrawals =
-            self.internal_slash_in_pending_withdrawals(slash_staker_id, slash_amount, governance);
+            self.internal_slash_in_pending_withdrawals(slash_staker_id, slash_amount, treasury);
 
         if slashed_amount_from_pending_withdrawals == slash_amount {
             return slash_amount;
         }
 
         let slashed_amount_from_staker_shares = if staker.shares != 0 {
-            self.internal_slash_in_staker_shares(slash_staker_id, slash_amount, governance)
+            self.internal_slash_in_staker_shares(slash_staker_id, slash_amount, treasury)
         } else {
             0
         };
@@ -346,11 +346,11 @@ impl RestakingBaseContract {
     pub(crate) fn internal_slash_in_pending_withdrawals(
         &mut self,
         slash_staker_id: &StakerId,
-        slah_amount: Balance,
-        governance: &AccountId,
+        slash_amount: Balance,
+        treasury: &AccountId,
     ) -> Balance {
         let staker_account = self.internal_get_account_or_panic(slash_staker_id);
-        let mut governance_account = self.internal_get_account_or_panic(&governance);
+        let mut governance_account = self.internal_get_account_or_panic(&treasury);
         let mut pending_withdrawals = staker_account
             .pending_withdrawals
             .values()
@@ -359,13 +359,13 @@ impl RestakingBaseContract {
 
         let mut acc_slash_amount = 0;
         for pending_withdrawal in &mut pending_withdrawals {
-            if acc_slash_amount == slah_amount {
+            if acc_slash_amount == slash_amount {
                 break;
             }
             let new_pending_withdrawal = pending_withdrawal.slash(
                 self.next_uuid().into(),
-                max(pending_withdrawal.amount, slah_amount - acc_slash_amount),
-                governance.clone(),
+                max(pending_withdrawal.amount, slash_amount - acc_slash_amount),
+                treasury.clone(),
             );
 
             governance_account.pending_withdrawals.insert(
@@ -380,19 +380,19 @@ impl RestakingBaseContract {
     pub(crate) fn internal_slash_in_staker_shares(
         &mut self,
         slash_staker_id: &StakerId,
-        slah_amount: Balance,
-        governance: &AccountId,
+        slash_amount: Balance,
+        treasury: &AccountId,
     ) -> Balance {
         let pool_id = self.internal_get_staker_selected_pool_or_panic(slash_staker_id);
         let staker = self.internal_get_staker_or_panic(&slash_staker_id);
         let staking_pool = self.internal_get_staking_pool_by_staker_or_panic(&slash_staker_id);
 
-        let slah_staker_total_balance =
+        let slash_staker_total_balance =
             staking_pool.staked_amount_from_shares_balance_rounded_up(staker.shares);
-        let actul_slash_amount = min(slah_staker_total_balance, slah_amount);
+        let actual_slash_amount = min(slash_staker_total_balance, slash_amount);
 
         let (decrease_shares, receive_amount) =
-            self.internal_decrease_stake(&slash_staker_id, actul_slash_amount);
+            self.internal_decrease_stake(&slash_staker_id, actual_slash_amount);
 
         ext_staking_pool::ext(pool_id)
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE))
@@ -413,10 +413,10 @@ impl RestakingBaseContract {
                         slash_staker_id.clone(),
                         decrease_shares.into(),
                         receive_amount.into(),
-                        governance.clone(),
-                        Some(governance.clone()),
+                        treasury.clone(),
+                        Some(treasury.clone()),
                     ),
             );
-        actul_slash_amount
+        actual_slash_amount
     }
 }

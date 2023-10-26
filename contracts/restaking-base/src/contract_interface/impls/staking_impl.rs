@@ -33,14 +33,6 @@ impl StakerAction for RestakingBaseContract {
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_SELECT_POOL_AFTER_CHECK_WHITELIST))
                     .stake_after_check_whitelisted(staker_id.clone(), pool_id.clone()),
             )
-            // .then(
-            //     // Self::ext(env::current_account_id())
-            //     self.ping(Some(pool_id)).then(
-            //         Self::ext(current_account_id())
-            //             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_INCREASE_STAKE_AFTER_PING))
-            //             .increase_stake_after_ping(staker_id, env::attached_deposit().into()),
-            //     ),
-            // )
             .into();
     }
 
@@ -163,6 +155,10 @@ impl StakerAction for RestakingBaseContract {
             pending_withdrawal.unlock_epoch,
             env::block_timestamp(),
             env::epoch_height()
+        );
+        assert!(
+            pending_withdrawal.allow_other_withdraw
+                || env::predecessor_account_id().eq(&pending_withdrawal.beneficiary)
         );
 
         ext_staking_pool::ext(pending_withdrawal.pool_id.clone())
@@ -389,9 +385,11 @@ impl StakingCallback for RestakingBaseContract {
                     beneficiary,
                     receive_amount.0,
                     staking_pool.pool_id.clone(),
+                    true,
                 );
                 self.internal_save_staking_pool(&staking_pool);
-                self.internal_save_staker(&staker_id, &staker);
+                // self.internal_save_staker(&staker_id, &staker);
+                self.stakers.remove(&staker_id);
 
                 let sequence = U64(self.next_sequence());
 
@@ -436,7 +434,7 @@ impl StakingCallback for RestakingBaseContract {
         decrease_shares: U128,
         decrease_amount: U128,
         beneficiary: AccountId,
-        slash_governance: Option<AccountId>,
+        slash_treasury: Option<AccountId>,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
@@ -457,6 +455,7 @@ impl StakingCallback for RestakingBaseContract {
                     beneficiary,
                     decrease_amount.0,
                     staking_pool.pool_id.clone(),
+                    false,
                 );
                 self.internal_save_staking_pool(&staking_pool);
                 self.internal_save_staker(&staker_id, &staker);
@@ -483,12 +482,13 @@ impl StakingCallback for RestakingBaseContract {
             PromiseResult::Failed => {
                 let selected_pool_id = self.internal_get_staker_selected_pool_or_panic(&staker_id);
 
-                match slash_governance {
-                    Some(governance_account_id) => {
-                        let mut slash_governance_account =
-                            self.internal_get_account_or_panic(&governance_account_id);
-                        slash_governance_account
-                            .save_legacy_shares(decrease_shares.0, selected_pool_id.clone())
+                match slash_treasury {
+                    Some(treasury_account_id) => {
+                        let mut treasury_account =
+                            self.internal_get_account_or_new(&treasury_account_id);
+                        treasury_account
+                            .save_legacy_shares(decrease_shares.0, selected_pool_id.clone());
+                        self.internal_save_account(&treasury_account_id, &treasury_account);
                     }
                     None => {
                         self.internal_decrease_stake_rollback(
@@ -771,6 +771,7 @@ impl RestakingBaseContract {
         beneficiary: AccountId,
         amount: Balance,
         pool_id: PoolId,
+        allow_other_withdraw: bool,
     ) -> PendingWithdrawal {
         let pending_withdrawal = PendingWithdrawal::new(
             self.next_uuid().into(),
@@ -779,6 +780,7 @@ impl RestakingBaseContract {
             env::epoch_height() + NUM_EPOCHS_TO_UNLOCK,
             staker.get_unlock_time(),
             beneficiary,
+            allow_other_withdraw,
         );
 
         self.internal_use_account(&staker.staker_id, |account| {
