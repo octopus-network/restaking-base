@@ -7,3 +7,4 @@ pub mod impls;
 pub mod owner;
 pub mod restaking;
 pub mod staking;
+pub mod view;

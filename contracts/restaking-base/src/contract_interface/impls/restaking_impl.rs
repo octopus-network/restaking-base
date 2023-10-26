@@ -1,4 +1,4 @@
-use crate::{types::ValidatorSetInSequence, *};
+use crate::{contract_interface::view::RestakingView, types::ValidatorSetInSequence, *};
 
 #[near_bindgen]
 impl ConsumerChainAction for RestakingBaseContract {
@@ -161,11 +161,7 @@ impl GovernanceAction for RestakingBaseContract {
         if is_approve {
             // 3. loop and slash
             for slash_item in &slash.slash_items {
-                self.internal_slash(
-                    &slash_item.0,
-                    slash_item.1.into(),
-                    &consumer_chain.treasury,
-                );
+                self.internal_slash(&slash_item.0, slash_item.1.into(), &consumer_chain.treasury);
                 // todo log
             }
         }
@@ -278,6 +274,13 @@ impl RestakingView for RestakingBaseContract {
         self.consumer_chains
             .get(&consumer_chain_id)
             .map(ConsumerChainInfo::from)
+    }
+
+    fn get_consumer_chains(&self) -> Vec<ConsumerChainInfo> {
+        self.consumer_chains
+            .values()
+            .map(ConsumerChainInfo::from)
+            .collect_vec()
     }
 
     fn get_validator_set(

@@ -6,7 +6,9 @@ pub mod models;
 pub mod types;
 pub mod utils;
 
+use crate::constants::gas_constants::*;
 use crate::events::*;
+use crate::external::consumer_chain_pos::ext_consumer_chain_pos;
 use crate::models::account::*;
 use crate::models::consumer_chain::ConsumerChain;
 use crate::models::consumer_chain::*;
@@ -16,6 +18,15 @@ use crate::models::staker::Staker;
 use crate::models::staker::*;
 use crate::models::staking_pool::*;
 use crate::utils::*;
+use crate::{
+    constants::NUM_EPOCHS_TO_UNLOCK,
+    contract_interface::staking::{StakerAction, StakingCallback},
+    contract_interface::view::*,
+    external::staking_pool_whitelist::ext_whitelist,
+    types::ShareBalance,
+};
+use crate::{contract_interface::restaking::*, external::staking_pool::ext_staking_pool};
+use itertools::Itertools;
 use models::account::Account;
 use models::pending_withdrawal::PendingWithdrawal;
 use models::slash::Slash;
@@ -27,30 +38,17 @@ use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::U128;
 use near_sdk::json_types::U64;
 use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::Gas;
+use near_sdk::PromiseResult;
 use near_sdk::{
     assert_one_yocto, env, ext_contract, near_bindgen, AccountId, Balance, BorshStorageKey,
     PanicOnDefault, Promise, StorageUsage,
 };
 use near_sdk::{log, PromiseOrValue};
-use types::{ConsumerChainId, PoolId, SlashId, StakerId, WithdrawalCertificate};
-
-use crate::constants::gas_constants::*;
-use crate::external::consumer_chain_pos::ext_consumer_chain_pos;
-use crate::{
-    constants::NUM_EPOCHS_TO_UNLOCK,
-    contract_interface::staking::{StakeView, StakerAction, StakingCallback},
-    external::staking_pool_whitelist::ext_whitelist,
-    types::ShareBalance,
-};
-use crate::{
-    contract_interface::restaking::*, external::staking_pool::ext_staking_pool, types::ValidatorSet,
-};
-use itertools::Itertools;
-use near_sdk::Gas;
 use near_sdk::{serde_json::json, ONE_YOCTO};
-use near_sdk::{PromiseResult, Timestamp};
 use std::cmp::{max, min};
 use std::ops::Mul;
+use types::*;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]

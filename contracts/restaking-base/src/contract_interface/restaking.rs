@@ -43,15 +43,3 @@ pub trait RestakingCallback {
         staker_id: AccountId,
     ) -> PromiseOrValue<bool>;
 }
-
-pub trait RestakingView {
-    fn get_consumer_chain(&self, consumer_chain_id: ConsumerChainId) -> Option<ConsumerChainInfo>;
-    fn get_validator_set(
-        &self,
-        consumer_chain_id: ConsumerChainId,
-        limit: u32,
-    ) -> ValidatorSetInSequence;
-    fn get_slash_guarantee(&self) -> U128;
-    fn get_cc_register_fee(&self) -> U128;
-    fn get_owner(&self) -> AccountId;
-}

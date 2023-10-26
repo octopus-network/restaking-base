@@ -52,22 +52,3 @@ impl StorageManager {
         }
     }
 }
-
-impl RestakingBaseContract {
-    pub(crate) fn internal_get_storage_manager_or_panic(
-        &self,
-        account_id: &AccountId,
-    ) -> StorageManager {
-        self.storage_managers
-            .get(account_id)
-            .expect(format!("Failed to get storage manager by {}", account_id).as_str())
-    }
-
-    pub(crate) fn internal_save_storage_manager(
-        &mut self,
-        account_id: &AccountId,
-        storage_manager: &StorageManager,
-    ) {
-        self.storage_managers.insert(account_id, storage_manager);
-    }
-}
