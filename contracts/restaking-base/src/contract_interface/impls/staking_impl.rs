@@ -219,6 +219,10 @@ impl StakeView for RestakingBaseContract {
         self.get_staker_staked_balance(&account_id).into()
     }
 
+    fn get_current_sequence(&self) -> Sequence {
+        self.sequence.into()
+    }
+
     fn is_withdrawable(&self, staker_id: StakerId, certificate: WithdrawalCertificate) -> bool {
         self.internal_get_account_or_panic(&staker_id)
             .pending_withdrawals

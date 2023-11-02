@@ -17,6 +17,8 @@ pub trait StakeView {
 
     fn get_account_staked_balance(&self, account_id: AccountId) -> U128;
 
+    fn get_current_sequence(&self) -> Sequence;
+
     fn is_withdrawable(&self, staker_id: StakerId, certificate: WithdrawalCertificate) -> bool;
 }
 
