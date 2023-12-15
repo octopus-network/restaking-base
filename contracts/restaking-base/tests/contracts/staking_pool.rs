@@ -137,8 +137,6 @@ impl StakingPoolContract {
             .await
             .unwrap()
     }
-
-    // fn unstake_all(&mut self);
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]

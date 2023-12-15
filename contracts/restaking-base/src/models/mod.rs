@@ -4,4 +4,3 @@ pub mod pending_withdrawal;
 pub mod slash;
 pub mod staker;
 pub mod staking_pool;
-pub mod storage_manager;

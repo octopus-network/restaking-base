@@ -53,7 +53,6 @@ impl ConsumerChainAction for RestakingBaseContract {
 
 #[near_bindgen]
 impl GovernanceAction for RestakingBaseContract {
-    // todo CC怎么指定自己Governance
     #[payable]
     fn register_consumer_chain(&mut self, register_param: ConsumerChainRegisterParam) {
         // check register_fee eq env::attached_deposit
@@ -93,8 +92,6 @@ impl GovernanceAction for RestakingBaseContract {
 
     #[payable]
     fn deregister_consumer_chain(&mut self, consumer_chain_id: ConsumerChainId) {
-        // todo how to clean consumer chain state?
-
         assert_one_yocto();
 
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
@@ -155,14 +152,12 @@ impl GovernanceAction for RestakingBaseContract {
 
         // 2. assert predecessor_account_id is cc gov
         let consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
-
         consumer_chain.assert_cc_gov();
 
         if is_approve {
             // 3. loop and slash
             for slash_item in &slash.slash_items {
                 self.internal_slash(&slash_item.0, slash_item.1.into(), &consumer_chain.treasury);
-                // todo log
             }
         }
 
@@ -378,7 +373,7 @@ impl RestakingBaseContract {
         treasury: &AccountId,
     ) -> Balance {
         let staker_account = self.internal_get_account_or_panic(slash_staker_id);
-        let mut governance_account = self.internal_get_account_or_panic(&treasury);
+        let mut treasury_account = self.internal_get_account_or_panic(&treasury);
         let mut pending_withdrawals = staker_account
             .pending_withdrawals
             .values()
@@ -396,7 +391,7 @@ impl RestakingBaseContract {
                 treasury.clone(),
             );
 
-            governance_account.pending_withdrawals.insert(
+            treasury_account.pending_withdrawals.insert(
                 &new_pending_withdrawal.withdrawal_certificate,
                 &new_pending_withdrawal,
             );

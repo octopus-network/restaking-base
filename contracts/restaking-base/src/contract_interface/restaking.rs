@@ -1,7 +1,4 @@
-use crate::{
-    models::consumer_chain::ConsumerChainInfo,
-    types::{SlashId, ValidatorSet, ValidatorSetInSequence},
-};
+use crate::types::SlashId;
 
 use super::*;
 

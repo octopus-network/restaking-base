@@ -2,6 +2,7 @@ pub mod constants;
 pub mod contract_interface;
 pub mod events;
 pub mod external;
+pub mod migrate;
 pub mod models;
 pub mod types;
 pub mod utils;
@@ -9,11 +10,8 @@ pub mod utils;
 use crate::constants::gas_constants::*;
 use crate::events::*;
 use crate::external::consumer_chain_pos::ext_consumer_chain_pos;
-use crate::models::account::*;
 use crate::models::consumer_chain::ConsumerChain;
 use crate::models::consumer_chain::*;
-use crate::models::pending_withdrawal::*;
-use crate::models::slash::*;
 use crate::models::staker::Staker;
 use crate::models::staker::*;
 use crate::models::staking_pool::*;
@@ -32,7 +30,6 @@ use models::pending_withdrawal::PendingWithdrawal;
 use models::slash::Slash;
 use models::staker::StakingChangeResult;
 use models::staking_pool::StakingPool;
-use models::storage_manager::StorageManager;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::U128;
@@ -42,7 +39,7 @@ use near_sdk::Gas;
 use near_sdk::PromiseResult;
 use near_sdk::{
     assert_one_yocto, env, ext_contract, near_bindgen, AccountId, Balance, BorshStorageKey,
-    PanicOnDefault, Promise, StorageUsage,
+    PanicOnDefault, Promise,
 };
 use near_sdk::{log, PromiseOrValue};
 use near_sdk::{serde_json::json, ONE_YOCTO};
@@ -75,8 +72,6 @@ pub struct RestakingBaseContract {
     pub slashes: LookupMap<SlashId, Slash>,
     /// The map from account id to account struct
     pub accounts: LookupMap<AccountId, Account>,
-    /// The map from account id to storage manager struct
-    pub storage_managers: LookupMap<AccountId, StorageManager>,
 }
 
 #[near_bindgen]
@@ -100,7 +95,6 @@ impl RestakingBaseContract {
             slash_guarantee: slash_guarantee.0,
             slashes: LookupMap::new(StorageKey::Slashes),
             accounts: LookupMap::new(StorageKey::Accounts),
-            storage_managers: LookupMap::new(StorageKey::StorageManagers),
         }
     }
 
@@ -133,5 +127,4 @@ pub(crate) enum StorageKey {
     Slashes,
     Accounts,
     PendingWithdrawals { account_id: AccountId },
-    StorageManagers,
 }

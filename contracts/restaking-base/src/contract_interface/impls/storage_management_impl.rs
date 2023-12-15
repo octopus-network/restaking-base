@@ -1,7 +1,6 @@
 use near_contract_standards::storage_management::{
     StorageBalance, StorageBalanceBounds, StorageManagement,
 };
-use near_sdk::env::STORAGE_PRICE_PER_BYTE;
 
 use crate::{constants::REGISTER_STORAGE_FEE, *};
 

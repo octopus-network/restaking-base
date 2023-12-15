@@ -1,4 +1,4 @@
-use crate::{external::staking_pool, types::Sequence, *};
+use crate::{types::Sequence, *};
 
 #[near_bindgen]
 impl StakerAction for RestakingBaseContract {
@@ -113,7 +113,10 @@ impl StakerAction for RestakingBaseContract {
     }
 
     #[payable]
-    fn unstake(&mut self) -> PromiseOrValue<Option<StakingChangeResult>> {
+    fn unstake(
+        &mut self,
+        withdraw_by_anyone: Option<bool>,
+    ) -> PromiseOrValue<Option<StakingChangeResult>> {
         self.assert_attached_storage_fee();
         let staker_id = env::predecessor_account_id();
         let mut staker = self.internal_get_staker_or_panic(&staker_id);
@@ -140,14 +143,19 @@ impl StakerAction for RestakingBaseContract {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_DECREASE_STAKE_AFTER_PING))
-                    .unstake_after_ping(staker_id.clone(), staker_id.clone()),
+                    .unstake_after_ping(
+                        staker_id.clone(),
+                        staker_id.clone(),
+                        withdraw_by_anyone.unwrap_or(true),
+                    ),
             )
             .into();
     }
 
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128> {
-        let account = self.internal_get_account_or_panic(&staker);
-        let pending_withdrawal = account.pending_withdrawals.get(&id).unwrap();
+        let pending_withdrawal = self.internal_use_account(&staker, |account| {
+            account.pending_withdrawals.remove(&id).unwrap()
+        });
         assert!(
             pending_withdrawal.is_withdrawable(),
             "unlock timestamp:{}, unlock epoch:{}, current timestamp:{}, current epoch: {} ",
@@ -167,7 +175,7 @@ impl StakerAction for RestakingBaseContract {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_SINGLE_WITHDRAW_CALLBACK))
-                    .withdraw_callback(staker, id),
+                    .withdraw_callback(staker, pending_withdrawal),
             )
             .into()
     }
@@ -238,25 +246,23 @@ impl StakingCallback for RestakingBaseContract {
     fn withdraw_callback(
         &mut self,
         account_id: AccountId,
-        withdrawal_certificate: WithdrawalCertificate,
+        pending_withdrawal: PendingWithdrawal,
     ) -> PromiseOrValue<U128> {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
-                let pending_withdrawal = self
-                    .internal_use_account(&account_id, |account| {
-                        account.pending_withdrawals.remove(&withdrawal_certificate)
-                    })
-                    .unwrap();
                 self.transfer_near(pending_withdrawal.beneficiary, pending_withdrawal.amount);
                 Event::Withdraw {
-                    withdrawal_certificate: &withdrawal_certificate,
+                    withdrawal_certificate: &pending_withdrawal.withdrawal_certificate,
                 }
                 .emit();
                 PromiseOrValue::Value(pending_withdrawal.amount.into())
             }
             PromiseResult::Failed => {
-                panic!("withdraw failed")
+                self.internal_use_account(&account_id, |account| {
+                    account.rollback_pending_withdrawals(&pending_withdrawal)
+                });
+                PromiseOrValue::Value(0.into())
             }
         }
     }
@@ -266,6 +272,7 @@ impl StakingCallback for RestakingBaseContract {
         &mut self,
         staker_id: AccountId,
         beneficiary: AccountId,
+        withdraw_by_anyone: bool,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
@@ -301,6 +308,7 @@ impl StakingCallback for RestakingBaseContract {
                                 decrease_shares.into(),
                                 receive_amount.into(),
                                 beneficiary,
+                                withdraw_by_anyone,
                             ),
                     )
                     .into()
@@ -368,6 +376,7 @@ impl StakingCallback for RestakingBaseContract {
         share_balance: U128,
         receive_amount: U128,
         beneficiary: AccountId,
+        withdraw_by_anyone: bool,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
@@ -389,7 +398,7 @@ impl StakingCallback for RestakingBaseContract {
                     beneficiary,
                     receive_amount.0,
                     staking_pool.pool_id.clone(),
-                    true,
+                    withdraw_by_anyone,
                 );
                 self.internal_save_staking_pool(&staking_pool);
                 // self.internal_save_staker(&staker_id, &staker);
@@ -416,12 +425,7 @@ impl StakingCallback for RestakingBaseContract {
                 }))
             }
             PromiseResult::Failed => {
-                let selected_pool_id = self.internal_get_staker_selected_pool_or_panic(&staker_id);
-                self.internal_decrease_stake_rollback(
-                    &staker_id,
-                    &selected_pool_id,
-                    share_balance.0,
-                );
+                self.internal_decrease_stake_rollback(&staker_id, share_balance.0);
 
                 self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
                     staking_pool.unlock()
@@ -459,7 +463,7 @@ impl StakingCallback for RestakingBaseContract {
                     beneficiary,
                     decrease_amount.0,
                     staking_pool.pool_id.clone(),
-                    false,
+                    true,
                 );
                 self.internal_save_staking_pool(&staking_pool);
                 self.internal_save_staker(&staker_id, &staker);
@@ -495,11 +499,7 @@ impl StakingCallback for RestakingBaseContract {
                         self.internal_save_account(&treasury_account_id, &treasury_account);
                     }
                     None => {
-                        self.internal_decrease_stake_rollback(
-                            &staker_id,
-                            &selected_pool_id,
-                            decrease_shares.0,
-                        );
+                        self.internal_decrease_stake_rollback(&staker_id, decrease_shares.0);
                     }
                 }
                 self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
@@ -818,7 +818,7 @@ impl RestakingBaseContract {
         );
         let mut staker = self.internal_get_staker_or_panic(staker_id);
         let pool_id = &self.internal_get_staker_selected_pool_or_panic(staker_id);
-        let mut staking_pool = self.internal_get_staking_pool_or_panic(pool_id);
+        let staking_pool = self.internal_get_staking_pool_or_panic(pool_id);
 
         // Calculate the number of shares required to unstake the given amount.
         // NOTE: The number of shares the account will pay is rounded up.
@@ -850,52 +850,10 @@ impl RestakingBaseContract {
     pub(crate) fn internal_decrease_stake_rollback(
         &mut self,
         staker_id: &StakerId,
-        pool_id: &PoolId,
         decrease_share: ShareBalance,
     ) {
         self.internal_use_staker_or_panic(staker_id, |staker| {
             staker.shares += decrease_share;
         });
-    }
-
-    // todo delete
-    pub(crate) fn internal_increase_stake(
-        &mut self,
-        staking_pool: &StakingPool,
-        increase_stake_amount: Balance,
-    ) -> ShareBalance {
-        assert!(
-            increase_stake_amount > 0,
-            "Staking amount should be positive"
-        );
-
-        let increase_shares =
-            staking_pool.share_balance_from_staked_amount_rounded_down(increase_stake_amount);
-        assert!(
-            increase_shares > 0,
-            "The calculated number of increase stake shares should be positive, increase amount: {}, total_staked_shares: {}, total_staked_balance: {}",
-            increase_stake_amount,
-            staking_pool.total_share_balance,staking_pool.total_staked_balance
-        );
-
-        // The amount of tokens the account will be charged from the unstaked balance.
-        // Rounded down to avoid overcharging the account to guarantee that the account can always
-        // unstake at least the same amount as staked.
-        let charge_amount =
-            staking_pool.staked_amount_from_shares_balance_rounded_down(increase_shares);
-        assert!(
-            charge_amount > 0 && increase_stake_amount >= charge_amount,
-            "Invariant violation. Calculated staked amount must be positive, because \"stake\" share price should be at least 1.Increase_stake_amount is {},charge_amount is {})",
-            increase_stake_amount,
-            charge_amount
-        );
-
-        log!(
-            "stake {} increase shares {}.",
-            increase_stake_amount,
-            increase_shares
-        );
-
-        increase_shares
     }
 }

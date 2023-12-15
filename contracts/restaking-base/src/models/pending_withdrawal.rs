@@ -61,7 +61,7 @@ impl PendingWithdrawal {
             unlock_epoch: self.unlock_epoch,
             unlock_time: env::block_timestamp(),
             beneficiary,
-            allow_other_withdraw: false,
+            allow_other_withdraw: true,
         }
     }
 }

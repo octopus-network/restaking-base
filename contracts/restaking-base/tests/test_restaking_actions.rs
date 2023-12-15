@@ -180,27 +180,3 @@ async fn test_slash() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-#[tokio::test]
-async fn test_query_vs() -> anyhow::Result<()> {
-    let worker = workspaces::sandbox().await?;
-    let env = setup_common_test_env(&worker).await?;
-    setup_staker_select_pool(&env).await?;
-    env.restaking_base_contract
-        .mock_staker_bond(
-            &env.staker1,
-            10,
-            env.staking_pool_contract.deploy_account.id().clone(),
-            env.test_chain_id.clone(),
-        )
-        .await
-        .into_result()?;
-
-    let result = env
-        .restaking_base_contract
-        .call_get_validator_set(&env.staker1, env.test_chain_id.clone(), 10)
-        .await;
-
-    dbg!(&result);
-    Ok(())
-}

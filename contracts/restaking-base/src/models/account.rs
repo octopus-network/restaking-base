@@ -4,7 +4,7 @@ use crate::{types::ShareBalance, *};
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct Account {
-    // todo stakingpool 没法获取所有持续有shares的人
+    // todo staking pool can't get all shares keeper
     pub legacy_shares: HashMap<PoolId, ShareBalance>,
 
     // todo need more suitable datastruct
@@ -24,6 +24,13 @@ impl Account {
             .checked_add(self.legacy_shares.get(&pool_id).unwrap_or(&0).to_owned())
             .unwrap();
         self.legacy_shares.insert(pool_id, new_shares);
+    }
+
+    pub fn rollback_pending_withdrawals(&mut self, pending_withdrawal: &PendingWithdrawal) {
+        self.pending_withdrawals.insert(
+            &pending_withdrawal.withdrawal_certificate,
+            &pending_withdrawal,
+        );
     }
 }
 

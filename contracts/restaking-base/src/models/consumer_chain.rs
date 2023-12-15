@@ -14,13 +14,13 @@ pub struct ConsumerChain {
     pub consumer_chain_id: ConsumerChainId,
     /// Staker need to wait some period for unbonding consumer chain
     pub unbond_period: DurationOfSeconds,
-    /// The url of consuemr chain's websit
+    /// The url of consumer chain's website
     pub website: String,
     /// The account id of governance
     pub governance: AccountId,
     /// The set of bonding stakers' ids
     pub bonding_stakers: UnorderedSet<StakerId>,
-    /// The account id of treasury, the slash token will send to this account.  
+    /// The account id of treasury, the slash token will send to this account
     pub treasury: AccountId,
     pub status: ConsumerChainStatus,
     pub pos_account_id: AccountId,
@@ -62,7 +62,6 @@ impl ConsumerChain {
                 consumer_chain_id: register_param.consumer_chain_id.clone(),
             }),
             treasury: register_param.treasury,
-            // todo
             status: ConsumerChainStatus::Active,
             pos_account_id: register_param.cc_pos_account,
             blacklist: UnorderedSet::new(StorageKey::ConsumerChainBlackList {

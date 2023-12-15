@@ -1,4 +1,4 @@
-use crate::{types::Sequence, *};
+use crate::*;
 
 pub const EVENT_STANDARD: &str = "restaking-base";
 pub const EVENT_STANDARD_VERSION: &str = "1.1.0";

@@ -9,7 +9,10 @@ pub trait StakerAction {
         decrease_amount: U128,
         beneficiary: Option<AccountId>,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
-    fn unstake(&mut self) -> PromiseOrValue<Option<StakingChangeResult>>;
+    fn unstake(
+        &mut self,
+        withdraw_by_anyone: Option<bool>,
+    ) -> PromiseOrValue<Option<StakingChangeResult>>;
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128>;
 }
 
@@ -66,6 +69,7 @@ pub trait StakingCallback {
         decrease_share_balance: U128,
         receive_amount: U128,
         beneficiary: AccountId,
+        withdraw_by_anyone: bool,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn decrease_stake_after_ping(
@@ -79,12 +83,13 @@ pub trait StakingCallback {
         &mut self,
         staker_id: AccountId,
         beneficiary: AccountId,
+        withdraw_by_anyone: bool,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn withdraw_callback(
         &mut self,
         account_id: AccountId,
-        withdrawal_certificate: WithdrawalCertificate,
+        pending_withdrawal: PendingWithdrawal,
     ) -> PromiseOrValue<U128>;
 
     fn ping_callback(&mut self, pool_id: PoolId, staked_balance: U128);

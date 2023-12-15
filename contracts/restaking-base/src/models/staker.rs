@@ -3,7 +3,7 @@ use std::cmp::max;
 use crate::types::{DurationOfSeconds, PoolId, Sequence, ShareBalance};
 use crate::*;
 use near_sdk::Duration;
-use near_sdk::{collections::UnorderedSet, Timestamp};
+use near_sdk::Timestamp;
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct Staker {

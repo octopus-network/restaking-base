@@ -451,26 +451,5 @@ impl RestakingBaseContract {
             .unwrap()
     }
 
-    pub async fn mock_staker_bond(
-        &self,
-        signer: &Account,
-        staker_sum: u32,
-        selected_pool_id: AccountId,
-        bond_cc_id: ConsumerChainId,
-    ) -> ExecutionFinalResult {
-        signer
-            .call(self.get_deploy_account().id(), "mock_staker_bond")
-            .deposit(parse_near!("0.1 near"))
-            .max_gas()
-            .args_json(json!({
-                "staker_sum": staker_sum,
-                "selected_pool_id": selected_pool_id,
-                "bond_cc_id": bond_cc_id
-            }))
-            .transact()
-            .await
-            .unwrap()
-    }
-
     // #endregion
 }
