@@ -42,4 +42,11 @@ pub trait RestakingCallback {
         key: String,
         staker_id: AccountId,
     ) -> PromiseOrValue<bool>;
+
+    fn change_key_callback(
+        &mut self,
+        consumer_chain_id: ConsumerChainId,
+        new_key: String,
+        staker_id: AccountId,
+    );
 }

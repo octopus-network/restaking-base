@@ -152,8 +152,8 @@ impl GovernanceAction for RestakingBaseContract {
             "The slash is not belong to {}.",
             consumer_chain_id
         );
-        // 2. assert predecessor_account_id is cc gov
 
+        // 2. assert predecessor_account_id is cc gov
         let consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
 
         consumer_chain.assert_cc_gov();
@@ -232,6 +232,11 @@ impl StakerRestakingAction for RestakingBaseContract {
         self.internal_use_consumer_chain_or_panic(&consumer_chain_id, |consumer_chain| {
             consumer_chain.unbond(&staker_id)
         });
+        Event::StakerUnbond {
+            staker_id: &staker_id,
+            consumer_chain_id: &consumer_chain_id,
+        }
+        .emit();
     }
 }
 
@@ -263,6 +268,26 @@ impl RestakingCallback for RestakingBaseContract {
                 }
                 .emit();
                 PromiseOrValue::Value(true)
+            }
+        }
+    }
+
+    fn change_key_callback(
+        &mut self,
+        consumer_chain_id: ConsumerChainId,
+        new_key: String,
+        staker_id: AccountId,
+    ) {
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Failed => {}
+            PromiseResult::Successful(_) => {
+                Event::StakerChangeKey {
+                    staker_id: &staker_id,
+                    consumer_chain_id: &consumer_chain_id,
+                    new_key: &new_key,
+                }
+                .emit();
             }
         }
     }
