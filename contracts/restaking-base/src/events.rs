@@ -92,6 +92,10 @@ pub enum Event<'a> {
     Withdraw {
         withdrawal_certificate: &'a WithdrawalCertificate,
     },
+    CallbackWithFailed {
+        current_account_id: &'a AccountId,
+        predecessor_account_id: &'a AccountId,
+    },
 }
 
 impl Event<'_> {

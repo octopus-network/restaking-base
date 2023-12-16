@@ -17,20 +17,12 @@ pub trait StakerAction {
 }
 
 pub trait StakingCallback {
-    // fn select_pool_callback(&mut self, staker_id: AccountId, pool_id: PoolId, whitelisted: bool)->PromiseOrValue<bool>;
     fn stake_after_check_whitelisted(
         &mut self,
         staker_id: AccountId,
         pool_id: PoolId,
         whitelisted: bool,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
-
-    // fn stake_after_selected_pool(
-    //     &mut self,
-    //     pool_id: PoolId,
-    //     staker_id: AccountId,
-    //     stake_amount: U128,
-    // );
 
     fn stake_after_ping(
         &mut self,

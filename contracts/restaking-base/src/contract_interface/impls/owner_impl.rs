@@ -22,6 +22,20 @@ impl OwnerAction for RestakingBaseContract {
         self.assert_owner();
         self.slash_guarantee = new_slash_guarantee.into();
     }
+
+    #[payable]
+    fn set_contract_running(&mut self) {
+        assert_one_yocto();
+        self.assert_owner();
+        self.is_contract_running = true;
+    }
+
+    #[payable]
+    fn set_contract_pause(&mut self) {
+        assert_one_yocto();
+        self.assert_owner();
+        self.is_contract_running = false;
+    }
 }
 
 impl RestakingBaseContract {
@@ -31,6 +45,10 @@ impl RestakingBaseContract {
             env::predecessor_account_id(),
             "Predecessor should be owner!"
         );
+    }
+
+    pub(crate) fn assert_contract_is_running(&self) {
+        assert!(self.is_contract_running, "The contract is pause.");
     }
 
     pub(crate) fn assert_attached_storage_fee(&self) {

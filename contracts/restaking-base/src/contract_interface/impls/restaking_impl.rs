@@ -4,6 +4,7 @@ use crate::{contract_interface::view::RestakingView, types::ValidatorSetInSequen
 impl ConsumerChainAction for RestakingBaseContract {
     #[payable]
     fn blackout(&mut self, consumer_chain_id: ConsumerChainId, staker_id: StakerId) {
+        self.assert_contract_is_running();
         self.internal_use_consumer_chain_or_panic(&consumer_chain_id, |consumer_chain| {
             consumer_chain.assert_cc_pos_account();
             consumer_chain.blacklist.insert(&staker_id);
@@ -17,6 +18,7 @@ impl ConsumerChainAction for RestakingBaseContract {
         slash_items: Vec<(AccountId, U128)>,
         evidence_sha256_hash: String,
     ) -> SlashId {
+        self.assert_contract_is_running();
         assert_eq!(
             env::attached_deposit(),
             self.slash_guarantee,
@@ -55,6 +57,7 @@ impl ConsumerChainAction for RestakingBaseContract {
 impl GovernanceAction for RestakingBaseContract {
     #[payable]
     fn register_consumer_chain(&mut self, register_param: ConsumerChainRegisterParam) {
+        self.assert_contract_is_running();
         // check register_fee eq env::attached_deposit
         assert_eq!(
             env::attached_deposit(),
@@ -92,6 +95,7 @@ impl GovernanceAction for RestakingBaseContract {
 
     #[payable]
     fn deregister_consumer_chain(&mut self, consumer_chain_id: ConsumerChainId) {
+        self.assert_contract_is_running();
         assert_one_yocto();
 
         let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
@@ -110,6 +114,7 @@ impl GovernanceAction for RestakingBaseContract {
         consumer_chain_id: ConsumerChainId,
         update_param: ConsumerChainUpdateParam,
     ) {
+        self.assert_contract_is_running();
         assert_one_yocto();
         let mut consumer_chain = self.consumer_chains.get(&consumer_chain_id).expect(
             format!(
@@ -139,6 +144,7 @@ impl GovernanceAction for RestakingBaseContract {
 
     #[payable]
     fn slash(&mut self, consumer_chain_id: ConsumerChainId, slash_id: SlashId, is_approve: bool) {
+        self.assert_contract_is_running();
         // todo if slash item too much, need finish slash by multi transaction.
         assert_one_yocto();
 
@@ -253,6 +259,7 @@ impl RestakingCallback for RestakingBaseContract {
                 staker.unbond(&consumer_chain.consumer_chain_id);
                 self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
                 self.internal_save_staker(&staker_id, &staker);
+                emit_callback_failed_event();
                 PromiseOrValue::Value(false)
             }
             PromiseResult::Successful(_) => {
@@ -275,7 +282,9 @@ impl RestakingCallback for RestakingBaseContract {
     ) {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
-            PromiseResult::Failed => {}
+            PromiseResult::Failed => {
+                emit_callback_failed_event();
+            }
             PromiseResult::Successful(_) => {
                 Event::StakerChangeKey {
                     staker_id: &staker_id,
@@ -338,6 +347,10 @@ impl RestakingView for RestakingBaseContract {
 
     fn get_owner(&self) -> AccountId {
         self.owner.clone()
+    }
+
+    fn is_contract_running(&self) -> bool {
+        self.is_contract_running
     }
 }
 

@@ -46,6 +46,7 @@ impl RestakingBaseContract {
             slash_guarantee: old_contract.slash_guarantee,
             slashes: old_contract.slashes,
             accounts: old_contract.accounts,
+            is_contract_running: true,
         }
     }
 }

@@ -1,7 +1,7 @@
 use near_sdk::{env, Duration};
 use regex::Regex;
 
-use crate::types::DurationOfSeconds;
+use crate::{events::Event, types::DurationOfSeconds};
 
 pub fn assert_attached_near() {
     assert!(env::attached_deposit() > 0, "No near attached.")
@@ -9,6 +9,14 @@ pub fn assert_attached_near() {
 
 pub fn seconds_to_nanoseconds(seconds: DurationOfSeconds) -> Duration {
     seconds * 1_000_000_000
+}
+
+pub fn emit_callback_failed_event() {
+    Event::CallbackWithFailed {
+        current_account_id: &env::current_account_id(),
+        predecessor_account_id: &env::predecessor_account_id(),
+    }
+    .emit();
 }
 
 pub mod u64_dec_format {

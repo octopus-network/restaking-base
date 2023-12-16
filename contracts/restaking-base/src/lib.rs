@@ -72,6 +72,7 @@ pub struct RestakingBaseContract {
     pub slashes: LookupMap<SlashId, Slash>,
     /// The map from account id to account struct
     pub accounts: LookupMap<AccountId, Account>,
+    pub is_contract_running: bool,
 }
 
 #[near_bindgen]
@@ -95,6 +96,7 @@ impl RestakingBaseContract {
             slash_guarantee: slash_guarantee.0,
             slashes: LookupMap::new(StorageKey::Slashes),
             accounts: LookupMap::new(StorageKey::Accounts),
+            is_contract_running: true,
         }
     }
 
