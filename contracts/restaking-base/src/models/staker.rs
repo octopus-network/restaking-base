@@ -35,10 +35,14 @@ impl Staker {
         }
     }
 
-    pub fn bond(&mut self, consumer_chain_id: &ConsumerChainId, unbond_period: DurationOfSeconds) {
+    pub fn bond(
+        &mut self,
+        consumer_chain_id: &ConsumerChainId,
+        unbonding_period: DurationOfSeconds,
+    ) {
         assert!(
             self.unbonding_unlock_time <= env::block_timestamp(),
-            "Failed to bond by {}, the bonding unlock time({}) should not great then block time({}).",
+            "Failed to bond by {}, the unbonding unlock time({}) should not greater then block time({}).",
             self.staker_id,
             self.unbonding_unlock_time,
             env::block_timestamp()
@@ -46,14 +50,14 @@ impl Staker {
 
         self.max_bonding_unlock_period = max(
             self.max_bonding_unlock_period,
-            seconds_to_nanoseconds(unbond_period),
+            seconds_to_nanoseconds(unbonding_period),
         );
         self.bonding_consumer_chains
-            .insert(consumer_chain_id, &unbond_period);
+            .insert(consumer_chain_id, &unbonding_period);
     }
 
     pub fn unbond(&mut self, consumer_chain_id: &ConsumerChainId) {
-        let unbond_period = self
+        let unbonding_period = self
             .bonding_consumer_chains
             .remove(&consumer_chain_id)
             .expect(
@@ -66,7 +70,7 @@ impl Staker {
 
         self.unbonding_unlock_time = max(
             self.unbonding_unlock_time,
-            env::block_timestamp() + unbond_period,
+            env::block_timestamp() + unbonding_period,
         );
 
         self.max_bonding_unlock_period = self

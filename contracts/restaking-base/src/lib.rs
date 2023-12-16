@@ -2,7 +2,6 @@ pub mod constants;
 pub mod contract_interface;
 pub mod events;
 pub mod external;
-pub mod migrate;
 pub mod models;
 pub mod types;
 pub mod utils;
