@@ -42,7 +42,7 @@ impl Staker {
     ) {
         assert!(
             self.unbonding_unlock_time <= env::block_timestamp(),
-            "Failed to bond by {}, the unbonding unlock time({}) should not great then block time({}).",
+            "Failed to bond by {}, the unbonding unlock time({}) should not greater then block time({}).",
             self.staker_id,
             self.unbonding_unlock_time,
             env::block_timestamp()
