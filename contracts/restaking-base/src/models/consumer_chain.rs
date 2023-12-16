@@ -13,7 +13,7 @@ pub enum ConsumerChainStatus {
 pub struct ConsumerChain {
     pub consumer_chain_id: ConsumerChainId,
     /// Staker need to wait some period for unbonding consumer chain
-    pub unbond_period: DurationOfSeconds,
+    pub unbonding_period: DurationOfSeconds,
     /// The url of consumer chain's website
     pub website: String,
     /// The account id of governance
@@ -55,7 +55,7 @@ impl ConsumerChain {
     ) -> Self {
         Self {
             consumer_chain_id: register_param.consumer_chain_id.clone(),
-            unbond_period: register_param.unbond_period,
+            unbonding_period: register_param.unbonding_period,
             website: register_param.website,
             governance: governance,
             bonding_stakers: UnorderedSet::new(StorageKey::ConsumerChainBondingStakers {
@@ -72,8 +72,8 @@ impl ConsumerChain {
     }
 
     pub fn update(&mut self, update_param: ConsumerChainUpdateParam) {
-        if update_param.unbond_period.is_some() {
-            self.unbond_period = update_param.unbond_period.unwrap();
+        if update_param.unbonding_period.is_some() {
+            self.unbonding_period = update_param.unbonding_period.unwrap();
         }
 
         if update_param.website.is_some() {
@@ -152,7 +152,7 @@ impl RestakingBaseContract {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ConsumerChainUpdateParam {
-    pub unbond_period: Option<DurationOfSeconds>,
+    pub unbonding_period: Option<DurationOfSeconds>,
     pub website: Option<String>,
     pub treasury: Option<AccountId>,
     pub governance: Option<AccountId>,
@@ -163,17 +163,16 @@ pub struct ConsumerChainUpdateParam {
 pub struct ConsumerChainRegisterParam {
     pub consumer_chain_id: ConsumerChainId,
     pub cc_pos_account: AccountId,
-    pub unbond_period: DurationOfSeconds,
+    pub unbonding_period: DurationOfSeconds,
     pub website: String,
     pub treasury: AccountId,
-    // pub goverannce: AccountId
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ConsumerChainInfo {
     pub consumer_chain_id: ConsumerChainId,
-    pub unbond_period: DurationOfSeconds,
+    pub unbonding_period: DurationOfSeconds,
     pub website: String,
     pub governance: AccountId,
     pub treasury: AccountId,
@@ -186,7 +185,7 @@ impl From<ConsumerChain> for ConsumerChainInfo {
     fn from(value: ConsumerChain) -> Self {
         Self {
             consumer_chain_id: value.consumer_chain_id,
-            unbond_period: value.unbond_period,
+            unbonding_period: value.unbonding_period,
             website: value.website,
             governance: value.governance,
             treasury: value.treasury,

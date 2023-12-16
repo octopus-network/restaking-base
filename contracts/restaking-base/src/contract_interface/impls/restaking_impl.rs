@@ -183,7 +183,7 @@ impl StakerRestakingAction for RestakingBaseContract {
 
         staker.bond(
             &consumer_chain.consumer_chain_id,
-            consumer_chain.unbond_period,
+            consumer_chain.unbonding_period,
         );
         consumer_chain.bond(&staker.staker_id);
         self.internal_save_staker(&staker_id, &staker);

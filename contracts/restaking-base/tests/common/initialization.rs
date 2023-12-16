@@ -125,7 +125,7 @@ pub async fn setup_common_test_env(worker: &Worker<Sandbox>) -> anyhow::Result<C
         MockConsumerChainPosContract::deploy(register_account(&worker, "cc_pos").await).await;
 
     let cc_id = "test:test".to_string();
-    let cc_unbond_period = (86400 * 7) as u64;
+    let cc_unbonding_period = (86400 * 7) as u64;
     restaking_base_contract
         .register_consumer_chain(
             &cc_gov,
@@ -134,7 +134,7 @@ pub async fn setup_common_test_env(worker: &Worker<Sandbox>) -> anyhow::Result<C
                 cc_pos_account: near_sdk::AccountId::new_unchecked(
                     cc_pos_contract.deploy_account.id().to_string(),
                 ),
-                unbond_period: cc_unbond_period,
+                unbonding_period: cc_unbonding_period,
                 website: "website".to_string(),
                 treasury: near_sdk::AccountId::new_unchecked(cc_treasury.id().to_string()),
             },

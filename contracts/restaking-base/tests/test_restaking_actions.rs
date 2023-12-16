@@ -27,7 +27,7 @@ async fn test_update_consumer_chain_info() -> anyhow::Result<()> {
             &env.cc_gov,
             env.test_chain_id.clone(),
             ConsumerChainUpdateParam {
-                unbond_period: Some(86400 * 14),
+                unbonding_period: Some(86400 * 14),
                 website: Some("new website".to_string()),
                 treasury: None,
                 governance: None,

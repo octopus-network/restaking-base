@@ -5,24 +5,24 @@
 Contents:
 
 - [Restaking Base](#restaking-base)
-    - [Terminology](#terminology)
-    - [Use Case](#use-case)
-    - [Function specification](#function-specification)
-        - [Stake](#stake)
-        - [Increase Stake](#increase-stake)
-        - [Decrease Stake](#decrease-stake)
-        - [Register](#register)
-        - [Unregister](#unregister)
-        - [Update CC Info](#update-cc-info)
-        - [Bond](#bond)
-        - [ChangeID](#change-id)
-        - [Unbond](#unbond)
-        - [Blackout](#blackout)
-        - [Slash](#slash)
-        - [Query VS](#query-vs)
-        - [Unstake](#unstake)
-        - [Withdraw](#withdraw)
-    - [DataStruct and Interfaces](#datastruct-and-interfaces)
+  - [Terminology](#terminology)
+  - [Use case](#use-case)
+  - [Function specification](#function-specification)
+    - [Stake](#stake)
+    - [Increase Stake](#increase-stake)
+    - [Decrease Stake](#decrease-stake)
+    - [Register](#register)
+    - [Unregister](#unregister)
+    - [Update CC Info](#update-cc-info)
+    - [Bond](#bond)
+    - [Change ID](#change-id)
+    - [Unbond](#unbond)
+    - [Blackout](#blackout)
+    - [Slash](#slash)
+    - [Query VS](#query-vs)
+    - [Unstake](#unstake)
+    - [Withdraw](#withdraw)
+  - [DataStruct and Interfaces](#datastruct-and-interfaces)
 
 ## Terminology
 
@@ -70,7 +70,7 @@ The `Staker` can decrease their `staking` amount after the `stake` operation has
 
 ### Register
 
-This `CC PoS` can submit registration information to the staking-base contract. The following information needs to be provided: `chain_id`, `unbond_period `, `website `, `governance `, and `treasury`. Additionally, a certain amount of NEAR tokens needs to be attached as the registration fee during the registration process.
+This `CC PoS` can submit registration information to the staking-base contract. The following information needs to be provided: `chain_id`, `unbonding_period `, `website `, `governance `, and `treasury`. Additionally, a certain amount of NEAR tokens needs to be attached as the registration fee during the registration process.
 
 ![](images/register.png)
 
