@@ -38,4 +38,6 @@ pub trait RestakingView {
     fn get_cc_register_fee(&self) -> U128;
 
     fn get_owner(&self) -> AccountId;
+
+    fn is_contract_running(&self) -> bool;
 }
