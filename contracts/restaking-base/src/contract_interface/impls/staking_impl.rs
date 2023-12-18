@@ -9,6 +9,11 @@ impl StakerAction for RestakingBaseContract {
 
         let staker_id = env::predecessor_account_id();
 
+        assert!(
+            self.accounts.get(&staker_id).is_some(),
+            "Should register by storage_deposit first."
+        );
+
         let staker = self
             .stakers
             .get(&staker_id)
