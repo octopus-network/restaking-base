@@ -16,7 +16,7 @@ pub struct Staker {
     /// The map from consumer chain id to unbonding period
     pub bonding_consumer_chains: UnorderedMap<ConsumerChainId, DurationOfSeconds>,
     /// The max period of bonding unlock
-    pub max_bonding_unlock_period: Duration,
+    pub max_bonding_unlock_period: DurationOfSeconds,
     /// If execute unbond it'll record unlock time
     pub unbonding_unlock_time: Timestamp,
 }
@@ -48,12 +48,24 @@ impl Staker {
             env::block_timestamp()
         );
 
-        self.max_bonding_unlock_period = max(
-            self.max_bonding_unlock_period,
-            seconds_to_nanoseconds(unbonding_period),
-        );
+        self.max_bonding_unlock_period = max(self.max_bonding_unlock_period, unbonding_period);
         self.bonding_consumer_chains
             .insert(consumer_chain_id, &unbonding_period);
+    }
+
+    pub fn update_unbonding_period(
+        &mut self,
+        consumer_chain_id: &ConsumerChainId,
+        unbonding_period: DurationOfSeconds,
+    ) {
+        self.bonding_consumer_chains
+            .insert(consumer_chain_id, &unbonding_period);
+        self.max_bonding_unlock_period = self
+            .bonding_consumer_chains
+            .iter()
+            .map(|e| e.1)
+            .max()
+            .unwrap_or(0);
     }
 
     pub fn unbond(&mut self, consumer_chain_id: &ConsumerChainId) {
@@ -70,7 +82,7 @@ impl Staker {
 
         self.unbonding_unlock_time = max(
             self.unbonding_unlock_time,
-            env::block_timestamp() + unbonding_period,
+            env::block_timestamp() + seconds_to_nanoseconds(unbonding_period),
         );
 
         self.max_bonding_unlock_period = self
@@ -84,7 +96,7 @@ impl Staker {
     pub fn get_unlock_time(&self) -> Timestamp {
         max(
             self.unbonding_unlock_time,
-            env::block_timestamp() + self.max_bonding_unlock_period,
+            env::block_timestamp() + seconds_to_nanoseconds(self.max_bonding_unlock_period),
         )
     }
 }
