@@ -386,7 +386,7 @@ impl RestakingBaseContract {
         treasury: &AccountId,
     ) -> Balance {
         let staker_account = self.internal_get_account_or_panic(slash_staker_id);
-        let mut treasury_account = self.internal_get_account_or_panic(&treasury);
+        let mut treasury_account = self.internal_get_account_or_new(&treasury);
         let mut pending_withdrawals = staker_account
             .pending_withdrawals
             .values()
