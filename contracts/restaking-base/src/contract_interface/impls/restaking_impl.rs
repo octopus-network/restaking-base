@@ -131,7 +131,19 @@ impl GovernanceAction for RestakingBaseContract {
             consumer_chain.governance
         );
 
+        // Update unbonding period for every stakers.
+        if let Some(new_unbonding_period) = update_param.unbonding_period {
+            if new_unbonding_period != consumer_chain.unbonding_period {
+                for staker_id in consumer_chain.bonding_stakers.iter() {
+                    self.internal_use_staker_or_panic(&staker_id, |staker| {
+                        staker.update_unbonding_period(&consumer_chain_id, new_unbonding_period)
+                    });
+                }
+            }
+        }
+
         consumer_chain.update(update_param.clone());
+
         self.consumer_chains
             .insert(&consumer_chain_id, &consumer_chain);
 
