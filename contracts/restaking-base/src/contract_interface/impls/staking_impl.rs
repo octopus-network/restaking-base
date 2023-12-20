@@ -53,6 +53,7 @@ impl StakerAction for RestakingBaseContract {
 
         ext_staking_pool::ext(ping_pool_id.clone())
             .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_PING))
+            .with_unused_gas_weight(0)
             .ping()
             .function_call(
                 "get_account_staked_balance".to_string(),
@@ -65,6 +66,7 @@ impl StakerAction for RestakingBaseContract {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_PING_CALLBACK))
+                    .with_unused_gas_weight(0)
                     .ping_callback(ping_pool_id),
             )
     }
@@ -123,25 +125,13 @@ impl StakerAction for RestakingBaseContract {
     #[payable]
     fn unstake(
         &mut self,
+        beneficiary: Option<AccountId>,
         withdraw_by_anyone: Option<bool>,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
         self.assert_contract_is_running();
         self.assert_attached_storage_fee();
+        log!("Prepaid gas: {:?}", env::prepaid_gas());
         let staker_id = env::predecessor_account_id();
-        let mut staker = self.internal_get_staker_or_panic(&staker_id);
-        let bonding_consumer_chain_ids = staker
-            .bonding_consumer_chains
-            .iter()
-            .map(|e| e.0)
-            .collect_vec();
-        for bonding_consumer_chain_id in bonding_consumer_chain_ids {
-            let mut consumer_chain =
-                self.internal_get_consumer_chain_or_panic(&bonding_consumer_chain_id);
-            consumer_chain.unbond(&staker.staker_id);
-            staker.unbond(&consumer_chain.consumer_chain_id);
-            self.internal_save_consumer_chain(&bonding_consumer_chain_id, &consumer_chain);
-        }
-        self.internal_save_staker(&staker_id, &staker);
 
         self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
             staking_pool.lock()
@@ -151,10 +141,10 @@ impl StakerAction for RestakingBaseContract {
             .ping(Option::None)
             .then(
                 Self::ext(env::current_account_id())
-                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_DECREASE_STAKE_AFTER_PING))
+                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE_AFTER_PING))
                     .unstake_after_ping(
                         staker_id.clone(),
-                        staker_id.clone(),
+                        beneficiary.unwrap_or(staker_id.clone()),
                         withdraw_by_anyone.unwrap_or(true),
                     ),
             )
@@ -314,7 +304,7 @@ impl StakingCallback for RestakingBaseContract {
                     )
                     .then(
                         Self::ext(env::current_account_id())
-                            .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_DECREASE_STAKE_CALL_BACK))
+                            .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE_CALL_BACK))
                             .unstake_callback(
                                 staker_id,
                                 decrease_shares.into(),
@@ -401,20 +391,28 @@ impl StakingCallback for RestakingBaseContract {
                 let mut staker = self.internal_get_staker_or_panic(&staker_id);
                 let selected_pool_id = self.internal_get_staker_selected_pool_or_panic(&staker_id);
                 let mut staking_pool = self.internal_get_staking_pool_or_panic(&selected_pool_id);
-                staking_pool.total_staked_balance = new_total_staked_balance;
+
                 staking_pool.unstake(&staker_id, share_balance.0, new_total_staked_balance);
 
                 staking_pool.unlock();
 
                 let pending_withdrawal = self.internal_create_pending_withdrawal_in_staker(
-                    &mut staker,
+                    &staker,
                     beneficiary,
                     receive_amount.0,
                     staking_pool.pool_id.clone(),
                     withdraw_by_anyone,
                 );
                 self.internal_save_staking_pool(&staking_pool);
-                // self.internal_save_staker(&staker_id, &staker);
+
+                for (consumer_chain_id, _) in staker.bonding_consumer_chains.iter() {
+                    self.internal_use_consumer_chain_or_panic(
+                        &consumer_chain_id,
+                        |consumer_chain| consumer_chain.unbond(&staker_id),
+                    );
+                }
+                staker.bonding_consumer_chains.clear();
+
                 self.stakers.remove(&staker_id);
 
                 let sequence = U64(self.next_sequence());
@@ -763,16 +761,29 @@ impl StakingCallback for RestakingBaseContract {
     }
 
     #[private]
-    fn ping_callback(&mut self, pool_id: PoolId, #[callback] staked_balance: U128) {
-        self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
-            staking_pool.total_staked_balance = staked_balance.0;
-        });
+    fn ping_callback(&mut self, pool_id: PoolId) {
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Successful(value) => {
+                let staked_balance: U128 = near_sdk::serde_json::from_slice(&value).unwrap();
 
-        Event::Ping {
-            pool_id: &pool_id,
-            new_total_staked_balance: &staked_balance,
+                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
+                    staking_pool.total_staked_balance = staked_balance.0;
+                    staking_pool.unlock();
+                });
+
+                Event::Ping {
+                    pool_id: &pool_id,
+                    new_total_staked_balance: &staked_balance,
+                }
+                .emit();
+            }
+            PromiseResult::Failed => {
+                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
+                    staking_pool.unlock();
+                });
+            }
         }
-        .emit();
     }
 }
 

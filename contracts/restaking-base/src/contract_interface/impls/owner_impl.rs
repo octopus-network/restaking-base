@@ -36,6 +36,27 @@ impl OwnerAction for RestakingBaseContract {
         self.assert_owner();
         self.is_contract_running = false;
     }
+
+    #[payable]
+    fn set_withdrawal_beneficiary(
+        &mut self,
+        account_id: AccountId,
+        withdraw_certificate: WithdrawalCertificate,
+        new_beneficiary: AccountId,
+    ) {
+        assert_one_yocto();
+        self.assert_owner();
+        self.internal_use_account(&account_id, |account| {
+            let mut pending_withdrawal = account
+                .pending_withdrawals
+                .get(&withdraw_certificate)
+                .unwrap();
+            pending_withdrawal.beneficiary = new_beneficiary.clone();
+            account
+                .pending_withdrawals
+                .insert(&withdraw_certificate, &pending_withdrawal);
+        })
+    }
 }
 
 impl RestakingBaseContract {
