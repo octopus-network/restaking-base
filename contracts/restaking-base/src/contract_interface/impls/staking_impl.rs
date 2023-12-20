@@ -1,4 +1,4 @@
-use crate::{models::staker, types::Sequence, *};
+use crate::{types::Sequence, *};
 
 #[near_bindgen]
 impl StakerAction for RestakingBaseContract {
@@ -130,6 +130,7 @@ impl StakerAction for RestakingBaseContract {
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
         self.assert_contract_is_running();
         self.assert_attached_storage_fee();
+        log!("Prepaid gas: {:?}", env::prepaid_gas());
         let staker_id = env::predecessor_account_id();
 
         self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
@@ -760,16 +761,29 @@ impl StakingCallback for RestakingBaseContract {
     }
 
     #[private]
-    fn ping_callback(&mut self, pool_id: PoolId, #[callback] staked_balance: U128) {
-        self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
-            staking_pool.total_staked_balance = staked_balance.0;
-        });
+    fn ping_callback(&mut self, pool_id: PoolId) {
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Successful(value) => {
+                let staked_balance: U128 = near_sdk::serde_json::from_slice(&value).unwrap();
 
-        Event::Ping {
-            pool_id: &pool_id,
-            new_total_staked_balance: &staked_balance,
+                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
+                    staking_pool.total_staked_balance = staked_balance.0;
+                    staking_pool.unlock();
+                });
+
+                Event::Ping {
+                    pool_id: &pool_id,
+                    new_total_staked_balance: &staked_balance,
+                }
+                .emit();
+            }
+            PromiseResult::Failed => {
+                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
+                    staking_pool.unlock();
+                });
+            }
         }
-        .emit();
     }
 }
 

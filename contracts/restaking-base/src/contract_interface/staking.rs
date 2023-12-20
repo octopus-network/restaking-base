@@ -85,5 +85,5 @@ pub trait StakingCallback {
         pending_withdrawal: PendingWithdrawal,
     ) -> PromiseOrValue<U128>;
 
-    fn ping_callback(&mut self, pool_id: PoolId, staked_balance: U128);
+    fn ping_callback(&mut self, pool_id: PoolId);
 }
