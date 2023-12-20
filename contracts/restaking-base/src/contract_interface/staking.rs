@@ -11,6 +11,7 @@ pub trait StakerAction {
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
     fn unstake(
         &mut self,
+        beneficiary: Option<AccountId>,
         withdraw_by_anyone: Option<bool>,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128>;
