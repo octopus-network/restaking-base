@@ -19,6 +19,8 @@ pub trait StakeView {
 
     fn get_current_sequence(&self) -> Sequence;
 
+    fn get_current_epoch_height(&self) -> U64;
+
     fn is_withdrawable(&self, staker_id: StakerId, certificate: WithdrawalCertificate) -> bool;
 }
 

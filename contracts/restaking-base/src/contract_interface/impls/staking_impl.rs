@@ -156,13 +156,15 @@ impl StakerAction for RestakingBaseContract {
         let pending_withdrawal = self.internal_use_account(&staker, |account| {
             account.pending_withdrawals.remove(&id).unwrap()
         });
+        let staking_pool = self.internal_get_staking_pool_or_panic(&pending_withdrawal.pool_id);
         assert!(
-            pending_withdrawal.is_withdrawable(),
-            "unlock timestamp:{}, unlock epoch:{}, current timestamp:{}, current epoch: {} ",
+            pending_withdrawal.is_withdrawable() && staking_pool.is_withdrawable(),
+            "unlock timestamp:{}, unlock epoch:{}, current timestamp:{}, current epoch: {}, staking pool unlock epoch: {}",
             pending_withdrawal.unlock_time,
             pending_withdrawal.unlock_epoch,
             env::block_timestamp(),
-            env::epoch_height()
+            env::epoch_height(),
+            staking_pool.unlock_epoch
         );
         assert!(
             pending_withdrawal.allow_other_withdraw
@@ -231,12 +233,20 @@ impl StakeView for RestakingBaseContract {
         self.sequence.into()
     }
 
+    fn get_current_epoch_height(&self) -> U64 {
+        env::epoch_height().into()
+    }
+
     fn is_withdrawable(&self, staker_id: StakerId, certificate: WithdrawalCertificate) -> bool {
-        self.internal_get_account_or_panic(&staker_id)
+        let pending_withdrawal = self
+            .internal_get_account_or_panic(&staker_id)
             .pending_withdrawals
             .get(&certificate)
-            .unwrap()
-            .is_withdrawable()
+            .unwrap();
+
+        let pool = self.internal_get_staking_pool_or_panic(&pending_withdrawal.pool_id);
+
+        pending_withdrawal.is_withdrawable() && pool.is_withdrawable()
     }
 }
 
