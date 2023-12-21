@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::types::{ShareBalance, U256};
 use crate::*;
-use near_sdk::Balance;
+use near_sdk::{Balance, EpochHeight};
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct StakingPool {
@@ -15,6 +15,8 @@ pub struct StakingPool {
     pub stakers: UnorderedSet<AccountId>,
     /// When restaking base contract interactive with staking pool contract, it'll lock this staking pool until all cross contract call finished
     pub locked: bool,
+    /// Record staking pool unlock epoch
+    pub unlock_epoch: EpochHeight,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -26,6 +28,8 @@ pub struct StakingPoolInfo {
     #[serde(with = "u128_dec_format")]
     pub total_staked_balance: Balance,
     pub locked: bool,
+    #[serde(with = "u64_dec_format")]
+    pub unlock_epoch: EpochHeight,
 }
 
 impl From<&mut StakingPool> for StakingPoolInfo {
@@ -35,6 +39,7 @@ impl From<&mut StakingPool> for StakingPoolInfo {
             total_share_balance: value.total_share_balance,
             total_staked_balance: value.total_staked_balance,
             locked: value.locked,
+            unlock_epoch: value.unlock_epoch,
         }
     }
 }
@@ -46,6 +51,7 @@ impl From<StakingPool> for StakingPoolInfo {
             total_share_balance: value.total_share_balance,
             total_staked_balance: value.total_staked_balance,
             locked: value.locked,
+            unlock_epoch: value.unlock_epoch,
         }
     }
 }
@@ -60,6 +66,7 @@ pub struct StakingPoolDetail {
     pub total_staked_balance: Balance,
     pub stakers: HashSet<AccountId>,
     pub locked: bool,
+    pub unlock_epoch: EpochHeight,
 }
 
 impl StakingPool {
@@ -70,6 +77,7 @@ impl StakingPool {
             total_staked_balance: 0,
             stakers: UnorderedSet::new(StorageKey::StakingPoolStakers { pool_id: pool_id }),
             locked: false,
+            unlock_epoch: 0,
         };
         pool.stakers.insert(&first_staker);
         pool
@@ -82,6 +90,10 @@ impl StakingPool {
 
     pub fn unlock(&mut self) {
         self.locked = false;
+    }
+
+    pub fn is_withdrawable(&self) -> bool {
+        self.unlock_epoch <= env::epoch_height()
     }
 
     pub fn stake(
@@ -119,6 +131,7 @@ impl StakingPool {
     ) {
         self.total_share_balance -= decrease_shares;
         self.total_staked_balance = new_total_staked_balance;
+        self.unlock_epoch = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
     }
 
     pub fn unstake(
@@ -129,6 +142,7 @@ impl StakingPool {
     ) {
         self.decrease_stake(decrease_shares, new_total_staked_balance);
         self.stakers.remove(&staker_id);
+        self.unlock_epoch = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
     }
 
     pub fn calculate_increase_shares(&self, increase_near_amount: Balance) -> ShareBalance {
