@@ -57,6 +57,15 @@ impl OwnerAction for RestakingBaseContract {
                 .insert(&withdraw_certificate, &pending_withdrawal);
         })
     }
+
+    #[payable]
+    fn set_staker_unbonding_unlock_time_as_current_time(&mut self, staker_id: AccountId) {
+        assert_one_yocto();
+        self.assert_owner();
+        self.internal_use_staker_or_panic(&staker_id, |staker| {
+            staker.unbonding_unlock_time = env::block_timestamp();
+        });
+    }
 }
 
 impl RestakingBaseContract {

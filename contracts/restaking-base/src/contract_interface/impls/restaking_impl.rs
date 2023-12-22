@@ -190,16 +190,7 @@ impl StakerRestakingAction for RestakingBaseContract {
         self.assert_attached_storage_fee();
 
         let staker_id = env::predecessor_account_id();
-        let mut staker = self.internal_get_staker_or_panic(&staker_id);
-        let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
-
-        staker.bond(
-            &consumer_chain.consumer_chain_id,
-            consumer_chain.unbonding_period,
-        );
-        consumer_chain.bond(&staker.staker_id);
-        self.internal_save_staker(&staker_id, &staker);
-        self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
+        let consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
 
         self.ping(Option::None)
             .then(
@@ -262,19 +253,23 @@ impl RestakingCallback for RestakingBaseContract {
         key: String,
         staker_id: AccountId,
     ) -> PromiseOrValue<bool> {
-        let mut consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
-        let mut staker = self.internal_get_staker_or_panic(&staker_id);
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Failed => {
-                consumer_chain.unbond(&staker.staker_id);
-                staker.unbond(&consumer_chain.consumer_chain_id);
-                self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
-                self.internal_save_staker(&staker_id, &staker);
                 emit_callback_failed_event();
                 PromiseOrValue::Value(false)
             }
             PromiseResult::Successful(_) => {
+                let mut staker = self.internal_get_staker_or_panic(&staker_id);
+                let mut consumer_chain =
+                    self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
+
+                staker.bond(&consumer_chain_id, consumer_chain.unbonding_period);
+                consumer_chain.bond(&staker_id);
+
+                self.internal_save_staker(&staker_id, &staker);
+                self.internal_save_consumer_chain(&consumer_chain_id, &consumer_chain);
+
                 Event::StakerBond {
                     staker_id: &staker_id,
                     consumer_chain_id: &consumer_chain_id,
