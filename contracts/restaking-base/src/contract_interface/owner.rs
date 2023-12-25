@@ -12,4 +12,5 @@ pub trait OwnerAction {
         withdraw_certificate: WithdrawalCertificate,
         new_beneficiary: AccountId,
     );
+    fn set_staker_unbonding_unlock_time_as_current_time(&mut self, staker_id: AccountId);
 }
