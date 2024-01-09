@@ -156,6 +156,7 @@ impl GovernanceAction for RestakingBaseContract {
 
     #[payable]
     fn slash(&mut self, consumer_chain_id: ConsumerChainId, slash_id: SlashId, is_approve: bool) {
+        unreachable!();
         self.assert_contract_is_running();
         // todo if slash item too much, need finish slash by multi transaction.
         assert_one_yocto();
