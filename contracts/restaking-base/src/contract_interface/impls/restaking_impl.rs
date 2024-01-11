@@ -29,6 +29,15 @@ impl ConsumerChainAction for RestakingBaseContract {
         let consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
         consumer_chain.assert_cc_pos_account();
 
+        for (staker_id, _) in &slash_items {
+            let staker = self.internal_get_staker_or_panic(staker_id);
+            assert!(
+                staker.allow_slash(&consumer_chain_id),
+                "Failed to slash {}.",
+                staker_id
+            );
+        }
+
         let slash_id = U64(self.next_uuid());
 
         Event::RequestSlash {

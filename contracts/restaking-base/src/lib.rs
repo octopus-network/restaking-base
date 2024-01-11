@@ -129,4 +129,5 @@ pub(crate) enum StorageKey {
     Slashes,
     Accounts,
     PendingWithdrawals { account_id: AccountId },
+    StakerUnbondingConsumerChains { staker_id: StakerId },
 }

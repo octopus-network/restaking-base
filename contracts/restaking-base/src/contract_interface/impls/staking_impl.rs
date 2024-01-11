@@ -1,4 +1,4 @@
-use crate::{types::Sequence, *};
+use crate::{models::staker, types::Sequence, *};
 
 #[near_bindgen]
 impl StakerAction for RestakingBaseContract {
@@ -21,9 +21,8 @@ impl StakerAction for RestakingBaseContract {
 
         assert_eq!(staker.shares, 0, "Can't stake, shares is not zero");
         assert!(
-            staker.select_staking_pool.is_none()
-                || staker.select_staking_pool.clone().unwrap().ne(&pool_id),
-            "Staker({}) have selected pool({})",
+            staker.select_staking_pool.is_none(),
+            "Staker({}) have selected pool({}). Need unstake first.",
             staker_id,
             pool_id
         );
@@ -415,15 +414,16 @@ impl StakingCallback for RestakingBaseContract {
                 );
                 self.internal_save_staking_pool(&staking_pool);
 
-                for (consumer_chain_id, _) in staker.bonding_consumer_chains.iter() {
+                let staker_bonding_consumer_chains =
+                    staker.bonding_consumer_chains.keys().collect_vec();
+                for consumer_chain_id in &staker_bonding_consumer_chains {
                     self.internal_use_consumer_chain_or_panic(
                         &consumer_chain_id,
                         |consumer_chain| consumer_chain.unbond(&staker_id),
                     );
                 }
-                staker.bonding_consumer_chains.clear();
 
-                self.stakers.remove(&staker_id);
+                staker.unstake();
 
                 let sequence = U64(self.next_sequence());
 

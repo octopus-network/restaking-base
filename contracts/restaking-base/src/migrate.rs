@@ -1,3 +1,5 @@
+use near_sdk::Timestamp;
+
 use crate::*;
 
 #[near_bindgen]
@@ -10,9 +12,9 @@ pub struct OldRestakingBaseContract {
     /// Any staking change action will make sequence increase
     pub sequence: u64,
     /// The map from account id to staker struct
-    pub stakers: LookupMap<AccountId, Staker>,
+    pub stakers: LookupMap<AccountId, OldStaker>,
     /// The map from pool account id to staking pool struct
-    pub staking_pools: UnorderedMap<PoolId, OldStakingPool>,
+    pub staking_pools: UnorderedMap<PoolId, StakingPool>,
     /// The map from consumer chain id to consumer chain struct
     pub consumer_chains: UnorderedMap<ConsumerChainId, ConsumerChain>,
     /// The fee of register consumer chain
@@ -29,27 +31,34 @@ pub struct OldRestakingBaseContract {
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
-pub struct OldStakingPool {
-    pub pool_id: AccountId,
-    /// Total minted share balance in this staking pool
-    pub total_share_balance: ShareBalance,
-    /// Total staked near balance in this staking pool
-    pub total_staked_balance: Balance,
-    /// The set of all stakers' ids
-    pub stakers: UnorderedSet<AccountId>,
-    /// When restaking base contract interactive with staking pool contract, it'll lock this staking pool until all cross contract call finished
-    pub locked: bool,
+pub struct OldStaker {
+    pub staker_id: StakerId,
+    /// The staking pool which staker is select to stake
+    pub select_staking_pool: Option<PoolId>,
+    /// The share of staker owned in staking pool
+    pub shares: ShareBalance,
+    /// The map from consumer chain id to unbonding period
+    pub bonding_consumer_chains: UnorderedMap<ConsumerChainId, DurationOfSeconds>,
+    /// The max period of bonding unlock
+    pub max_bonding_unlock_period: DurationOfSeconds,
+    /// If execute unbond it'll record unlock time
+    pub unbonding_unlock_time: Timestamp,
 }
 
-impl From<OldStakingPool> for StakingPool {
-    fn from(value: OldStakingPool) -> Self {
+impl From<OldStaker> for Staker {
+    fn from(value: OldStaker) -> Self {
         Self {
-            pool_id: value.pool_id,
-            total_share_balance: value.total_share_balance,
-            total_staked_balance: value.total_staked_balance,
-            stakers: value.stakers,
-            locked: value.locked,
-            unlock_epoch: 0,
+            staker_id: value.staker_id.clone(),
+            select_staking_pool: value.select_staking_pool,
+            shares: value.shares,
+            bonding_consumer_chains: value.bonding_consumer_chains,
+            max_bonding_unlock_period: value.max_bonding_unlock_period,
+            unbonding_unlock_time: value.unbonding_unlock_time,
+            unbonding_consumer_chains: UnorderedMap::new(
+                StorageKey::StakerUnbondingConsumerChains {
+                    staker_id: value.staker_id,
+                },
+            ),
         }
     }
 }
@@ -58,32 +67,23 @@ impl From<OldStakingPool> for StakingPool {
 impl RestakingBaseContract {
     #[private]
     #[init(ignore_state)]
-    pub fn migrate() -> Self {
+    pub fn migrate(staker_list: Vec<AccountId>) -> Self {
         let mut old_contract: OldRestakingBaseContract = env::state_read().expect("failed");
-        let new_pool: Vec<StakingPool> = old_contract
-            .staking_pools
-            .values()
-            .into_iter()
-            .map(Into::into)
-            .collect_vec();
 
-        for pool in new_pool.iter() {
-            old_contract.staking_pools.remove(&pool.pool_id);
-        }
+        let mut new_stakers: LookupMap<AccountId, Staker> = LookupMap::new(StorageKey::Stakers);
 
-        let mut new_staking_pool_map: UnorderedMap<PoolId, StakingPool> =
-            UnorderedMap::new(StorageKey::StakingPools);
-
-        for pool in new_pool.iter() {
-            new_staking_pool_map.insert(&pool.pool_id, pool);
+        for staker_id in staker_list {
+            if let Some(old_staker) = old_contract.stakers.remove(&staker_id) {
+                new_stakers.insert(&staker_id, &old_staker.into());
+            }
         }
 
         Self {
             owner: old_contract.owner,
             uuid: old_contract.uuid,
             sequence: old_contract.sequence,
-            stakers: old_contract.stakers,
-            staking_pools: new_staking_pool_map,
+            stakers: new_stakers,
+            staking_pools: old_contract.staking_pools,
             consumer_chains: old_contract.consumer_chains,
             cc_register_fee: old_contract.cc_register_fee,
             staking_pool_whitelist_account: old_contract.staking_pool_whitelist_account,
@@ -92,15 +92,5 @@ impl RestakingBaseContract {
             accounts: old_contract.accounts,
             is_contract_running: old_contract.is_contract_running,
         }
-
-        // for (pool_id, pool) in old_contract.s
-
-        // let old_staking_pools: UnorderedMap<PoolId, OldStakingPool> = self.staking_pools
-        //     UnorderedMap::new(StorageKey::StakingPools);
-        // for (pool_id, pool) in old_staking_pools.iter() {
-        //     let new_pool = pool.into();
-        //     log!("Pool_id: {}", pool_id);
-        //     self.internal_save_staking_pool(&new_pool);
-        // }
     }
 }
