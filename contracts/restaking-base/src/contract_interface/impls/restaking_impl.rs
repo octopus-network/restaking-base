@@ -401,7 +401,11 @@ impl RestakingBaseContract {
         }
 
         let slashed_amount_from_staker_shares = if staker.shares != 0 {
-            self.internal_slash_in_staker_shares(slash_staker_id, slash_amount, treasury_id)
+            self.internal_slash_in_staker_shares(
+                slash_staker_id,
+                slash_amount - slashed_amount_from_pending_withdrawals,
+                treasury_id,
+            )
         } else {
             0
         };
