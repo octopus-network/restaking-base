@@ -434,7 +434,7 @@ impl RestakingBaseContract {
             }
             let new_pending_withdrawal = pending_withdrawal.slash(
                 self.next_uuid().into(),
-                max(pending_withdrawal.amount, slash_amount - acc_slash_amount),
+                min(pending_withdrawal.amount, slash_amount - acc_slash_amount),
                 treasury_id.clone(),
             );
 
