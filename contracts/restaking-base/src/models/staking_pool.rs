@@ -17,6 +17,21 @@ pub struct StakingPool {
     pub locked: bool,
     /// Record staking pool unlock epoch
     pub unlock_epoch: EpochHeight,
+
+    pub last_unstake_epoch: EpochHeight,
+    pub last_unstake_batch_id: Option<UnstakeBatchId>,
+    pub current_unstake_batch_id: UnstakeBatchId,
+    pub batched_unstake_amount: u128,
+    pub submitted_unstake_batches: UnorderedMap<U64, SubmittedUnstakeBatch>,
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct SubmittedUnstakeBatch {
+    pub unstake_batch_id: UnstakeBatchId,
+    pub submit_unstake_epoch: EpochHeight,
+    pub total_unstake_amount: u128,
+    pub claimed_amount: u128,
+    pub is_withdrawn: bool,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -70,17 +85,92 @@ pub struct StakingPoolDetail {
 }
 
 impl StakingPool {
-    pub fn new(pool_id: AccountId, first_staker: AccountId) -> Self {
-        let mut pool = Self {
+    pub fn new(pool_id: AccountId) -> Self {
+        let pool = Self {
             pool_id: pool_id.clone(),
             total_share_balance: 0,
             total_staked_balance: 0,
-            stakers: UnorderedSet::new(StorageKey::StakingPoolStakers { pool_id: pool_id }),
+            stakers: UnorderedSet::new(StorageKey::StakingPoolStakers {
+                pool_id: pool_id.clone(),
+            }),
             locked: false,
             unlock_epoch: 0,
+
+            last_unstake_epoch: 0,
+            last_unstake_batch_id: None,
+            current_unstake_batch_id: 0.into(),
+            batched_unstake_amount: 0,
+            submitted_unstake_batches: UnorderedMap::new(StorageKey::SubmittedUnstakeBatches {
+                pool_id: pool_id.clone(),
+            }),
         };
-        pool.stakers.insert(&first_staker);
         pool
+    }
+
+    pub fn is_able_submit(&self) -> bool {
+        self.last_unstake_epoch + NUM_EPOCHS_TO_UNLOCK <= env::epoch_height()
+    }
+
+    pub fn remain_staked_balance(&self) -> Balance {
+        self.total_staked_balance
+            .checked_sub(self.batched_unstake_amount)
+            .unwrap()
+    }
+
+    pub fn batch_unstake(&mut self, amount: Balance) -> UnstakeBatchId {
+        self.batched_unstake_amount += amount;
+        self.current_unstake_batch_id.clone()
+    }
+
+    pub fn withdraw_from_unstake_batch(
+        &mut self,
+        amount: Balance,
+        unstake_batch_id: UnstakeBatchId,
+    ) {
+        let mut submitted_unstake_batch = self
+            .submitted_unstake_batches
+            .get(&unstake_batch_id)
+            .unwrap();
+        assert!(submitted_unstake_batch.is_withdrawn);
+        submitted_unstake_batch.claimed_amount += amount;
+        assert!(
+            submitted_unstake_batch.total_unstake_amount >= submitted_unstake_batch.claimed_amount
+        );
+
+        if submitted_unstake_batch.claimed_amount == submitted_unstake_batch.total_unstake_amount {
+            self.submitted_unstake_batches.remove(&unstake_batch_id);
+        } else {
+            self.submitted_unstake_batches
+                .insert(&unstake_batch_id, &submitted_unstake_batch);
+        }
+    }
+
+    pub fn submit_unstake(&mut self) {
+        self.submitted_unstake_batches.insert(
+            &self.current_unstake_batch_id,
+            &SubmittedUnstakeBatch {
+                unstake_batch_id: self.current_unstake_batch_id,
+                submit_unstake_epoch: env::epoch_height(),
+                total_unstake_amount: self.batched_unstake_amount,
+                claimed_amount: 0,
+                is_withdrawn: false,
+            },
+        );
+
+        self.last_unstake_epoch = env::epoch_height();
+        self.last_unstake_batch_id = Some(self.current_unstake_batch_id.clone());
+        self.current_unstake_batch_id = (self.current_unstake_batch_id.0 + 1).into();
+        self.batched_unstake_amount = 0;
+    }
+
+    pub fn withdraw_unstake_batch(&mut self, unstake_batch_id: UnstakeBatchId) {
+        let mut submitted_unstake_batch = self
+            .submitted_unstake_batches
+            .get(&unstake_batch_id)
+            .unwrap();
+        submitted_unstake_batch.is_withdrawn = true;
+        self.submitted_unstake_batches
+            .insert(&unstake_batch_id, &submitted_unstake_batch);
     }
 
     pub fn lock(&mut self) {
@@ -124,23 +214,16 @@ impl StakingPool {
         increase_shares
     }
 
-    pub fn decrease_stake(
-        &mut self,
-        decrease_shares: ShareBalance,
-        new_total_staked_balance: Balance,
-    ) {
-        self.total_share_balance -= decrease_shares;
-        self.total_staked_balance = new_total_staked_balance;
+    pub fn decrease_stake(&mut self, decrease_shares: ShareBalance) {
+        self.total_share_balance = self
+            .total_share_balance
+            .checked_sub(decrease_shares)
+            .expect("Failed to decrease shares");
         self.unlock_epoch = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
     }
 
-    pub fn unstake(
-        &mut self,
-        staker_id: &AccountId,
-        decrease_shares: ShareBalance,
-        new_total_staked_balance: u128,
-    ) {
-        self.decrease_stake(decrease_shares, new_total_staked_balance);
+    pub fn unstake(&mut self, staker_id: &AccountId, decrease_shares: ShareBalance) {
+        self.decrease_stake(decrease_shares);
         self.stakers.remove(&staker_id);
         self.unlock_epoch = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
     }
@@ -194,12 +277,13 @@ impl StakingPool {
         &self,
         stake_amount: Balance,
     ) -> ShareBalance {
-        if self.total_staked_balance == 0 {
+        let remain_staked_balance = self.remain_staked_balance();
+        if remain_staked_balance == 0 {
             return stake_amount;
         }
 
         (U256::from(self.total_share_balance) * U256::from(stake_amount)
-            / U256::from(self.total_staked_balance))
+            / U256::from(remain_staked_balance))
         .as_u128()
     }
 
@@ -208,13 +292,14 @@ impl StakingPool {
     ///
     /// Rounding up division of `a / b` is done using `(a + b - 1) / b`.
     pub fn num_shares_from_staked_amount_rounded_up(&self, amount: Balance) -> ShareBalance {
+        let remain_staked_balance = self.remain_staked_balance();
         assert!(
-            self.total_staked_balance > 0,
-            "The total staked balance can't be 0"
+            remain_staked_balance > 0,
+            "The self.remain_staked_balance(); can't be 0"
         );
         ((U256::from(self.total_share_balance) * U256::from(amount)
-            + U256::from(self.total_staked_balance - 1))
-            / U256::from(self.total_staked_balance))
+            + U256::from(remain_staked_balance - 1))
+            / U256::from(remain_staked_balance))
         .as_u128()
     }
 
@@ -223,11 +308,13 @@ impl StakingPool {
         &self,
         share_balance: ShareBalance,
     ) -> Balance {
-        if self.total_share_balance == 0 {
-            return share_balance;
+        // let s
+        let remain_staked_balance = self.remain_staked_balance();
+        if remain_staked_balance == 0 {
+            return 0;
         }
 
-        (U256::from(self.total_staked_balance) * U256::from(share_balance)
+        (U256::from(remain_staked_balance) * U256::from(share_balance)
             / U256::from(self.total_share_balance))
         .as_u128()
     }
@@ -243,7 +330,7 @@ impl StakingPool {
             self.total_share_balance > 0,
             "The total number of stake shares can't be 0"
         );
-        ((U256::from(self.total_staked_balance) * U256::from(share_balance)
+        ((U256::from(self.remain_staked_balance()) * U256::from(share_balance)
             + U256::from(self.total_share_balance - 1))
             / U256::from(self.total_share_balance))
         .as_u128()

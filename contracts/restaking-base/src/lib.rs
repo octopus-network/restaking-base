@@ -35,6 +35,7 @@ use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::U128;
 use near_sdk::json_types::U64;
 use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::serde_json::json;
 use near_sdk::Gas;
 use near_sdk::PromiseResult;
 use near_sdk::{
@@ -42,8 +43,7 @@ use near_sdk::{
     PanicOnDefault, Promise,
 };
 use near_sdk::{log, PromiseOrValue};
-use near_sdk::{serde_json::json, ONE_YOCTO};
-use std::cmp::{max, min};
+use std::cmp::min;
 use std::ops::Mul;
 use types::*;
 
@@ -130,4 +130,5 @@ pub(crate) enum StorageKey {
     Accounts,
     PendingWithdrawals { account_id: AccountId },
     StakerUnbondingConsumerChains { staker_id: StakerId },
+    SubmittedUnstakeBatches { pool_id: PoolId },
 }

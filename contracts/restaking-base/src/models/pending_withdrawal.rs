@@ -15,6 +15,7 @@ pub struct PendingWithdrawal {
     pub unlock_time: Timestamp,
     pub beneficiary: AccountId,
     pub allow_other_withdraw: bool,
+    pub unstake_batch_id: Option<UnstakeBatchId>,
 }
 
 impl PendingWithdrawal {
@@ -26,6 +27,7 @@ impl PendingWithdrawal {
         unlock_time: Timestamp,
         beneficiary: AccountId,
         allow_other_withdraw: bool,
+        unstake_batch_id: UnstakeBatchId,
     ) -> PendingWithdrawal {
         Self {
             withdrawal_certificate,
@@ -35,6 +37,7 @@ impl PendingWithdrawal {
             unlock_time,
             beneficiary,
             allow_other_withdraw,
+            unstake_batch_id: Some(unstake_batch_id),
         }
     }
 
@@ -62,6 +65,7 @@ impl PendingWithdrawal {
             unlock_time: env::block_timestamp(),
             beneficiary,
             allow_other_withdraw: true,
+            unstake_batch_id: self.unstake_batch_id.clone(),
         }
     }
 }

@@ -163,6 +163,7 @@ impl GovernanceAction for RestakingBaseContract {
         .emit();
     }
 
+    #[allow(unused)]
     #[payable]
     fn slash(&mut self, consumer_chain_id: ConsumerChainId, slash_id: SlashId, is_approve: bool) {
         unreachable!();
@@ -405,6 +406,7 @@ impl RestakingBaseContract {
                 slash_staker_id,
                 slash_amount - slashed_amount_from_pending_withdrawals,
                 treasury_id,
+                treasury_account,
             )
         } else {
             0
@@ -452,41 +454,50 @@ impl RestakingBaseContract {
         slash_staker_id: &StakerId,
         slash_amount: Balance,
         treasury_id: &AccountId,
+        treasury_account: &mut Account,
     ) -> Balance {
         let pool_id = self.internal_get_staker_selected_pool_or_panic(slash_staker_id);
-        let staker = self.internal_get_staker_or_panic(&slash_staker_id);
-        let staking_pool = self.internal_get_staking_pool_by_staker_or_panic(&slash_staker_id);
+        let mut staker = self.internal_get_staker_or_panic(&slash_staker_id);
+        let mut staking_pool = self.internal_get_staking_pool_by_staker_or_panic(&slash_staker_id);
 
-        let slash_staker_total_balance =
+        // 1. Get staker staked balance
+        let staker_total_staked_balance =
             staking_pool.staked_amount_from_shares_balance_rounded_up(staker.shares);
-        let actual_slash_amount = min(slash_staker_total_balance, slash_amount);
 
-        let (decrease_shares, receive_amount) =
-            self.internal_decrease_stake(&slash_staker_id, actual_slash_amount);
+        // 2. Decrease min of staker_total_staked_balance and slash_amount
+        let decrease_shares =
+            staking_pool.calculate_decrease_shares(min(staker_total_staked_balance, slash_amount));
 
-        ext_staking_pool::ext(pool_id)
-            .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE))
-            .with_attached_deposit(ONE_YOCTO)
-            .unstake(receive_amount.into())
-            .function_call(
-                "get_account_staked_balance".to_string(),
-                json!({ "account_id": env::current_account_id() })
-                    .to_string()
-                    .into_bytes(),
-                0,
-                Gas::ONE_TERA.mul(TGAS_FOR_GET_ACCOUNT_STAKED_BALANCE),
-            )
-            .then(
-                Self::ext(env::current_account_id())
-                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE))
-                    .decrease_stake_callback(
-                        slash_staker_id.clone(),
-                        decrease_shares.into(),
-                        receive_amount.into(),
-                        treasury_id.clone(),
-                        Some(treasury_id.clone()),
-                    ),
-            );
-        actual_slash_amount
+        // 3. decrease shares and actually receive amount
+        let receive_amount =
+            staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+
+        staker.shares = staker
+            .shares
+            .checked_sub(decrease_shares)
+            .expect("Failed decrease shares in staker.");
+
+        staking_pool.decrease_stake(decrease_shares);
+        let unstake_batch_id = staking_pool.batch_unstake(receive_amount);
+
+        let pending_withdrawal = PendingWithdrawal::new(
+            self.next_uuid().into(),
+            pool_id,
+            receive_amount,
+            env::epoch_height() + NUM_EPOCHS_TO_UNLOCK,
+            staker.get_unlock_time(),
+            treasury_id.clone(),
+            true,
+            unstake_batch_id,
+        );
+        treasury_account.pending_withdrawals.insert(
+            &pending_withdrawal.withdrawal_certificate,
+            &pending_withdrawal,
+        );
+
+        self.internal_save_staking_pool(&staking_pool);
+        self.internal_save_staker(&staker.staker_id, &staker);
+
+        receive_amount
     }
 }
