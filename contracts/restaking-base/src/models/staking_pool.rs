@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::types::{ShareBalance, U256};
 use crate::*;
@@ -23,14 +23,18 @@ pub struct StakingPool {
     pub last_unstake_batch_id: Option<UnstakeBatchId>,
     pub current_unstake_batch_id: UnstakeBatchId,
     pub batched_unstake_amount: u128,
-    pub submitted_unstake_batches: UnorderedMap<U64, SubmittedUnstakeBatch>,
+    pub submitted_unstake_batches: UnorderedMap<UnstakeBatchId, SubmittedUnstakeBatch>,
 }
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
 pub struct SubmittedUnstakeBatch {
     pub unstake_batch_id: UnstakeBatchId,
+    #[serde(with = "u64_dec_format")]
     pub submit_unstake_epoch: EpochHeight,
+    #[serde(with = "u128_dec_format")]
     pub total_unstake_amount: u128,
+    #[serde(with = "u128_dec_format")]
     pub claimed_amount: u128,
     pub is_withdrawn: bool,
 }
@@ -46,6 +50,13 @@ pub struct StakingPoolInfo {
     pub locked: bool,
     #[serde(with = "u64_dec_format")]
     pub unlock_epoch: EpochHeight,
+    #[serde(with = "u64_dec_format")]
+    pub last_unstake_epoch: EpochHeight,
+    pub last_unstake_batch_id: Option<UnstakeBatchId>,
+    pub current_unstake_batch_id: UnstakeBatchId,
+    #[serde(with = "u128_dec_format")]
+    pub batched_unstake_amount: u128,
+    pub submitted_unstake_batches_count: u32,
 }
 
 impl From<&mut StakingPool> for StakingPoolInfo {
@@ -56,6 +67,11 @@ impl From<&mut StakingPool> for StakingPoolInfo {
             total_staked_balance: value.total_staked_balance,
             locked: value.locked,
             unlock_epoch: value.unlock_epoch,
+            last_unstake_epoch: value.last_unstake_epoch,
+            last_unstake_batch_id: value.last_unstake_batch_id,
+            current_unstake_batch_id: value.current_unstake_batch_id,
+            batched_unstake_amount: value.batched_unstake_amount,
+            submitted_unstake_batches_count: value.submitted_unstake_batches.len() as u32,
         }
     }
 }
@@ -68,11 +84,16 @@ impl From<StakingPool> for StakingPoolInfo {
             total_staked_balance: value.total_staked_balance,
             locked: value.locked,
             unlock_epoch: value.unlock_epoch,
+            last_unstake_epoch: value.last_unstake_epoch,
+            last_unstake_batch_id: value.last_unstake_batch_id,
+            current_unstake_batch_id: value.current_unstake_batch_id,
+            batched_unstake_amount: value.batched_unstake_amount,
+            submitted_unstake_batches_count: value.submitted_unstake_batches.len() as u32,
         }
     }
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct StakingPoolDetail {
     pub pool_id: AccountId,
@@ -80,9 +101,34 @@ pub struct StakingPoolDetail {
     pub total_share_balance: ShareBalance,
     #[serde(with = "u128_dec_format")]
     pub total_staked_balance: Balance,
-    pub stakers: HashSet<AccountId>,
+    pub stakers: Vec<AccountId>,
     pub locked: bool,
     pub unlock_epoch: EpochHeight,
+    #[serde(with = "u64_dec_format")]
+    pub last_unstake_epoch: EpochHeight,
+    pub last_unstake_batch_id: Option<UnstakeBatchId>,
+    pub current_unstake_batch_id: UnstakeBatchId,
+    #[serde(with = "u128_dec_format")]
+    pub batched_unstake_amount: u128,
+    pub submitted_unstake_batches: Vec<SubmittedUnstakeBatch>,
+}
+
+impl From<StakingPool> for StakingPoolDetail {
+    fn from(value: StakingPool) -> Self {
+        Self {
+            pool_id: value.pool_id,
+            total_share_balance: value.total_share_balance,
+            total_staked_balance: value.total_staked_balance,
+            stakers: value.stakers.iter().collect_vec(),
+            locked: value.locked,
+            unlock_epoch: value.unlock_epoch,
+            last_unstake_epoch: value.last_unstake_epoch,
+            last_unstake_batch_id: value.last_unstake_batch_id,
+            current_unstake_batch_id: value.current_unstake_batch_id,
+            batched_unstake_amount: value.batched_unstake_amount,
+            submitted_unstake_batches: value.submitted_unstake_batches.values().collect_vec(),
+        }
+    }
 }
 
 impl StakingPool {
@@ -162,6 +208,8 @@ impl StakingPool {
         self.last_unstake_batch_id = Some(self.current_unstake_batch_id.clone());
         self.current_unstake_batch_id = (self.current_unstake_batch_id.0 + 1).into();
         self.batched_unstake_amount = 0;
+
+        self.unlock_epoch = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
     }
 
     pub fn withdraw_unstake_batch(&mut self, unstake_batch_id: &UnstakeBatchId) {
@@ -220,13 +268,11 @@ impl StakingPool {
             .total_share_balance
             .checked_sub(decrease_shares)
             .expect("Failed to decrease shares");
-        self.unlock_epoch = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
     }
 
     pub fn unstake(&mut self, staker_id: &AccountId, decrease_shares: ShareBalance) {
         self.decrease_stake(decrease_shares);
         self.stakers.remove(&staker_id);
-        self.unlock_epoch = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
     }
 
     pub fn calculate_increase_shares(&self, increase_near_amount: Balance) -> ShareBalance {

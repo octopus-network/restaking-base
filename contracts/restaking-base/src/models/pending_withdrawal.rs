@@ -42,8 +42,7 @@ impl PendingWithdrawal {
     }
 
     pub fn is_withdrawable(&self) -> bool {
-        return env::block_timestamp() >= self.unlock_time
-            && env::epoch_height() >= self.unlock_epoch;
+        return env::block_timestamp() >= self.unlock_time;
     }
 
     pub fn slash(

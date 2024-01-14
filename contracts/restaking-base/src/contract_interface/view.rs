@@ -11,7 +11,7 @@ pub trait StakeView {
         limit: u32,
     ) -> Vec<ConsumerChainInfo>;
 
-    fn get_staking_pool(&self, pool_id: PoolId) -> StakingPoolInfo;
+    fn get_staking_pool(&self, pool_id: PoolId) -> StakingPoolDetail;
 
     fn get_staking_pools(&self) -> Vec<StakingPoolInfo>;
 
