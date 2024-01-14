@@ -45,6 +45,7 @@ pub enum Event<'a> {
         decrease_shares: &'a U128,
         pending_withdrawal: &'a PendingWithdrawal,
         sequence: &'a U64,
+        unstake_batch_id: &'a UnstakeBatchId,
     },
 
     StakerUnstake {
@@ -54,6 +55,7 @@ pub enum Event<'a> {
         decrease_shares: &'a U128,
         pending_withdrawal: &'a PendingWithdrawal,
         sequence: &'a U64,
+        unstake_batch_id: &'a UnstakeBatchId,
     },
 
     StakerBond {
@@ -95,6 +97,12 @@ pub enum Event<'a> {
     CallbackWithFailed {
         current_account_id: &'a AccountId,
         predecessor_account_id: &'a AccountId,
+    },
+    WithdrawUnstakeBatch {
+        unstake_batch_id: &'a UnstakeBatchId,
+    },
+    SubmitUnstakeBatch {
+        unstake_batch_id: &'a UnstakeBatchId,
     },
 }
 

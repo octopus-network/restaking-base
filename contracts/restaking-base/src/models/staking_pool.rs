@@ -17,8 +17,9 @@ pub struct StakingPool {
     pub locked: bool,
     /// Record staking pool unlock epoch
     pub unlock_epoch: EpochHeight,
-
+    /// Last epoch for calling unstake method in staking pool.
     pub last_unstake_epoch: EpochHeight,
+    /// Last unstake batch id, it'll be used when withdraw unstake batch.
     pub last_unstake_batch_id: Option<UnstakeBatchId>,
     pub current_unstake_batch_id: UnstakeBatchId,
     pub batched_unstake_amount: u128,
@@ -163,7 +164,7 @@ impl StakingPool {
         self.batched_unstake_amount = 0;
     }
 
-    pub fn withdraw_unstake_batch(&mut self, unstake_batch_id: UnstakeBatchId) {
+    pub fn withdraw_unstake_batch(&mut self, unstake_batch_id: &UnstakeBatchId) {
         let mut submitted_unstake_batch = self
             .submitted_unstake_batches
             .get(&unstake_batch_id)

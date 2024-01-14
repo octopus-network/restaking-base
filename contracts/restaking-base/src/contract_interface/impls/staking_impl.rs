@@ -373,7 +373,7 @@ impl StakingCallback for RestakingBaseContract {
                     receive_amount,
                     staking_pool.pool_id.clone(),
                     withdraw_by_anyone,
-                    unstake_batch_id,
+                    unstake_batch_id.clone(),
                 );
 
                 let staker_bonding_consumer_chains =
@@ -399,6 +399,7 @@ impl StakingCallback for RestakingBaseContract {
                     decrease_shares: &decrease_shares.into(),
                     pending_withdrawal: &pending_withdrawal,
                     sequence: &sequence,
+                    unstake_batch_id: &unstake_batch_id,
                 }
                 .emit();
 
@@ -454,7 +455,7 @@ impl StakingCallback for RestakingBaseContract {
                     receive_amount,
                     staking_pool.pool_id.clone(),
                     true,
-                    unstake_batch_id,
+                    unstake_batch_id.clone(),
                 );
 
                 self.internal_save_staker(&staker_id, &staker);
@@ -468,6 +469,7 @@ impl StakingCallback for RestakingBaseContract {
                     decrease_shares: &decrease_shares.into(),
                     pending_withdrawal: &pending_withdrawal,
                     sequence: &sequence,
+                    unstake_batch_id: &unstake_batch_id,
                 }
                 .emit();
 
@@ -723,6 +725,10 @@ impl StakingCallback for RestakingBaseContract {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
                 let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
+                Event::SubmitUnstakeBatch {
+                    unstake_batch_id: &staking_pool.current_unstake_batch_id,
+                }
+                .emit();
                 staking_pool.submit_unstake();
                 staking_pool.unlock();
                 self.internal_save_staking_pool(&staking_pool);
@@ -747,14 +753,22 @@ impl StakingCallback for RestakingBaseContract {
             PromiseResult::Successful(_) => {
                 let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
                 staking_pool.last_unstake_batch_id = None;
-                staking_pool.withdraw_unstake_batch(unstake_batch_id);
+                staking_pool.withdraw_unstake_batch(&unstake_batch_id);
                 self.internal_save_staking_pool(&staking_pool);
+
+                Event::WithdrawUnstakeBatch {
+                    unstake_batch_id: &unstake_batch_id,
+                }
+                .emit();
 
                 ext_staking_pool::ext(pool_id.clone())
                     .unstake(staking_pool.batched_unstake_amount.into())
                     .then(Self::ext(current_account_id()).submit_unstake_batch_callback(pool_id));
             }
             PromiseResult::Failed => {
+                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
+                    staking_pool.unlock();
+                });
                 emit_callback_failed_event();
             }
         }
