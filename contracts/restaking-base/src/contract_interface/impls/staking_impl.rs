@@ -105,6 +105,10 @@ impl StakerAction for RestakingBaseContract {
 
         let staker_id = env::predecessor_account_id();
 
+        self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+            staking_pool.lock()
+        });
+
         return self
             .ping(Option::None)
             .then(
@@ -163,21 +167,29 @@ impl StakerAction for RestakingBaseContract {
                 .get(&last_unstake_batch_id)
                 .unwrap();
             ext_staking_pool::ext(pool_id.clone())
+                .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_WITHDRAW))
+                .with_unused_gas_weight(0)
                 .withdraw(submitted_unstake_batch.total_unstake_amount.into())
                 .then(
                     Self::ext(current_account_id())
+                        .with_static_gas(
+                            Gas::ONE_TERA.mul(TGAS_FOR_WITHDRAW_UNSTAKE_BATCH_CALLBACK),
+                        )
+                        .with_unused_gas_weight(0)
                         .withdraw_unstake_batch_callback(pool_id.clone(), last_unstake_batch_id),
                 );
         } else {
             ext_staking_pool::ext(pool_id.clone())
+                .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE))
+                .with_unused_gas_weight(0)
                 .unstake(staking_pool.batched_unstake_amount.into())
-                .then(Self::ext(current_account_id()).submit_unstake_batch_callback(pool_id));
+                .then(
+                    Self::ext(current_account_id())
+                        .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE_BATCH_CALLBACK))
+                        .with_unused_gas_weight(0)
+                        .submit_unstake_batch_callback(pool_id),
+                );
         }
-
-        // if staking_pool.
-
-        // ext_staking_pool::
-        // staking_pool.submit_unstake()
     }
 
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128> {
@@ -411,6 +423,9 @@ impl StakingCallback for RestakingBaseContract {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Failed => {
+                self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+                    staking_pool.unlock();
+                });
                 emit_callback_failed_event();
                 PromiseOrValue::Value(None)
             }
@@ -700,8 +715,6 @@ impl StakingCallback for RestakingBaseContract {
                     .stake_after_ping(staker_id),
             )
             .into()
-
-        // return PromiseOrValue::Value(true);
     }
 
     #[private]
@@ -715,6 +728,9 @@ impl StakingCallback for RestakingBaseContract {
                 self.internal_save_staking_pool(&staking_pool);
             }
             PromiseResult::Failed => {
+                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
+                    staking_pool.unlock();
+                });
                 emit_callback_failed_event();
             }
         }
@@ -812,54 +828,4 @@ impl RestakingBaseContract {
             .and_then(|staker| staker.select_staking_pool.clone())
             .expect(format!("The staker({}) haven't select pool!", account_id).as_str())
     }
-
-    // pub(crate) fn internal_decrease_stake(
-    //     &mut self,
-    //     staker_id: &StakerId,
-    //     decrease_amount: Balance,
-    // ) -> (ShareBalance, Balance) {
-    //     assert!(
-    //         decrease_amount > 0,
-    //         "Decrease stake amount should be positive"
-    //     );
-    //     let mut staker = self.internal_get_staker_or_panic(staker_id);
-    //     let pool_id = &self.internal_get_staker_selected_pool_or_panic(staker_id);
-    //     let staking_pool = self.internal_get_staking_pool_or_panic(pool_id);
-
-    //     // Calculate the number of shares required to unstake the given amount.
-    //     // NOTE: The number of shares the account will pay is rounded up.
-    //     let num_shares = staking_pool.num_shares_from_staked_amount_rounded_up(decrease_amount);
-    //     assert!(
-    //         num_shares > 0,
-    //         "Invariant violation. The calculated number of stake shares for unstaking should be positive"
-    //     );
-    //     assert!(
-    //         staker.shares >= num_shares,
-    //         "Not enough staked balance to unstake"
-    //     );
-
-    //     // Calculating the amount of tokens the account will receive by unstaking the corresponding
-    //     // number of "stake" shares, rounding up.
-    //     let receive_amount = staking_pool.staked_amount_from_shares_balance_rounded_up(num_shares);
-    //     assert!(
-    //         receive_amount > 0,
-    //         "Invariant violation. Calculated staked amount must be positive, because stake share price should be at least 1"
-    //     );
-
-    //     staker.shares -= num_shares;
-
-    //     self.internal_save_staker(staker_id, &staker);
-
-    //     (num_shares, receive_amount)
-    // }
-
-    // pub(crate) fn internal_decrease_stake_rollback(
-    //     &mut self,
-    //     staker_id: &StakerId,
-    //     decrease_share: ShareBalance,
-    // ) {
-    //     self.internal_use_staker_or_panic(staker_id, |staker| {
-    //         staker.shares += decrease_share;
-    //     });
-    // }
 }
