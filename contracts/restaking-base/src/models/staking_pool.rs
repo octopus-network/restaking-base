@@ -1,5 +1,3 @@
-use std::collections::{HashMap, HashSet};
-
 use crate::types::{ShareBalance, U256};
 use crate::*;
 use near_sdk::{Balance, EpochHeight};
@@ -19,7 +17,7 @@ pub struct StakingPool {
     pub unlock_epoch: EpochHeight,
     /// Last epoch for calling unstake method in staking pool.
     pub last_unstake_epoch: EpochHeight,
-    /// Last unstake batch id, it'll be used when withdraw unstake batch.
+    /// Last unstake batch id, it'll be None if it's initial or withdrawn.
     pub last_unstake_batch_id: Option<UnstakeBatchId>,
     pub current_unstake_batch_id: UnstakeBatchId,
     pub batched_unstake_amount: u128,
@@ -154,8 +152,17 @@ impl StakingPool {
         pool
     }
 
-    pub fn is_able_submit(&self) -> bool {
-        self.last_unstake_epoch + NUM_EPOCHS_TO_UNLOCK <= env::epoch_height()
+    pub fn is_able_submit_unstake_batch(&self) -> bool {
+        self.batched_unstake_amount > 0 && self.last_unstake_batch_id.is_none()
+    }
+
+    pub fn is_unstake_batch_withdrawable(&self, unstake_batch_id: &UnstakeBatchId) -> bool {
+        self.submitted_unstake_batches
+            .get(&unstake_batch_id)
+            .unwrap()
+            .submit_unstake_epoch
+            + NUM_EPOCHS_TO_UNLOCK
+            <= env::epoch_height()
     }
 
     pub fn remain_staked_balance(&self) -> Balance {
@@ -233,6 +240,13 @@ impl StakingPool {
 
     pub fn is_withdrawable(&self) -> bool {
         self.unlock_epoch <= env::epoch_height()
+    }
+
+    pub fn is_unstake_batch_withdrawn(&self, unstake_batch_id: &UnstakeBatchId) -> bool {
+        self.submitted_unstake_batches
+            .get(unstake_batch_id)
+            .unwrap()
+            .is_withdrawn
     }
 
     pub fn stake(
@@ -342,7 +356,7 @@ impl StakingPool {
         let remain_staked_balance = self.remain_staked_balance();
         assert!(
             remain_staked_balance > 0,
-            "The self.remain_staked_balance(); can't be 0"
+            "The remain_staked_balance can't be 0"
         );
         ((U256::from(self.total_share_balance) * U256::from(amount)
             + U256::from(remain_staked_balance - 1))
@@ -355,11 +369,11 @@ impl StakingPool {
         &self,
         share_balance: ShareBalance,
     ) -> Balance {
-        // let s
-        let remain_staked_balance = self.remain_staked_balance();
-        if remain_staked_balance == 0 {
-            return 0;
+        if self.total_share_balance == 0 {
+            return share_balance;
         }
+
+        let remain_staked_balance = self.remain_staked_balance();
 
         (U256::from(remain_staked_balance) * U256::from(share_balance)
             / U256::from(self.total_share_balance))

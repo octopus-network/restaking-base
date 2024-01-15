@@ -14,6 +14,7 @@ pub trait StakerAction {
         beneficiary: Option<AccountId>,
         withdraw_by_anyone: Option<bool>,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
+    fn withdraw_unstake_batch(&mut self, pool_id: PoolId, unstake_batch_id: UnstakeBatchId);
     fn submit_unstake_batch(&mut self, pool_id: PoolId);
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128>;
 }
@@ -29,6 +30,7 @@ pub trait StakingCallback {
     fn stake_after_ping(
         &mut self,
         staker_id: AccountId,
+        pool_id: PoolId,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn increase_stake_after_ping(
@@ -40,6 +42,7 @@ pub trait StakingCallback {
         &mut self,
         staker_id: AccountId,
         stake_amount: U128,
+        pool_id: PoolId,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn increase_stake_callback(

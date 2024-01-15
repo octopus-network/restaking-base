@@ -1,8 +1,36 @@
 use std::collections::HashMap;
 
-use near_sdk::{env::log, EpochHeight, Timestamp};
+use near_sdk::{EpochHeight, Timestamp};
 
 use crate::*;
+
+#[near_bindgen]
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+pub struct MainnetRestakingBaseContract {
+    /// The owner of contract
+    pub owner: AccountId,
+    /// Universally Unique Identifier for some entity
+    pub uuid: u64,
+    /// Any staking change action will make sequence increase
+    pub sequence: u64,
+    /// The map from account id to staker struct
+    pub stakers: LookupMap<AccountId, OldStaker>,
+    /// The map from pool account id to staking pool struct
+    pub staking_pools: UnorderedMap<PoolId, OldStakingPool>,
+    /// The map from consumer chain id to consumer chain struct
+    pub consumer_chains: UnorderedMap<ConsumerChainId, ConsumerChain>,
+    /// The fee of register consumer chain
+    pub cc_register_fee: Balance,
+    /// The staking pool whitelist account
+    pub staking_pool_whitelist_account: AccountId,
+    /// The guarantee of slash
+    pub slash_guarantee: Balance,
+    /// The map from slash id to slash struct
+    pub slashes: LookupMap<SlashId, Slash>,
+    /// The map from account id to account struct
+    pub accounts: LookupMap<AccountId, OldAccount>,
+    pub is_contract_running: bool,
+}
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -193,6 +221,78 @@ impl From<OldPendingWithdrawal> for PendingWithdrawal {
 
 #[near_bindgen]
 impl RestakingBaseContract {
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate_mainnet(staker_list: Vec<AccountId>) -> Self {
+        let mut mainnet_contract: MainnetRestakingBaseContract =
+            env::state_read().expect("Failed read state");
+
+        let mut new_stakers: LookupMap<AccountId, Staker> = LookupMap::new(StorageKey::Stakers);
+        for staker_id in &staker_list {
+            if let Some(old_staker) = mainnet_contract.stakers.remove(staker_id) {
+                new_stakers.insert(staker_id, &old_staker.into());
+            }
+        }
+
+        let staking_pools = mainnet_contract.staking_pools.values().collect_vec();
+        let mut new_staking_pools: UnorderedMap<PoolId, StakingPool> =
+            UnorderedMap::new(StorageKey::StakingPools);
+        mainnet_contract.staking_pools.clear();
+        for e in staking_pools {
+            new_staking_pools.insert(&e.pool_id.clone(), &e.into());
+        }
+
+        let mut new_accounts: HashMap<AccountId, Account> = HashMap::new();
+        for account_id in staker_list {
+            if !mainnet_contract.accounts.contains_key(&account_id) {
+                continue;
+            }
+            let mut old_account = mainnet_contract.accounts.get(&account_id).unwrap();
+
+            let old_pending_withdrawals = old_account.pending_withdrawals.values().collect_vec();
+
+            old_account.pending_withdrawals.clear();
+
+            let mut new_account = Account {
+                legacy_shares: old_account.legacy_shares,
+                pending_withdrawals: UnorderedMap::<WithdrawalCertificate, PendingWithdrawal>::new(
+                    StorageKey::PendingWithdrawals {
+                        account_id: account_id.clone(),
+                    },
+                ),
+            };
+
+            for pending_withdrawal in old_pending_withdrawals {
+                new_account.pending_withdrawals.insert(
+                    &pending_withdrawal.withdrawal_certificate,
+                    &pending_withdrawal.clone().into(),
+                );
+            }
+            mainnet_contract.accounts.remove(&account_id);
+            new_accounts.insert(account_id, new_account);
+        }
+
+        let mut new_accounts_map = LookupMap::new(StorageKey::Accounts);
+        for (account_id, account) in new_accounts {
+            new_accounts_map.insert(&account_id, &account);
+        }
+
+        Self {
+            owner: mainnet_contract.owner,
+            uuid: mainnet_contract.uuid,
+            sequence: mainnet_contract.sequence,
+            stakers: new_stakers,
+            staking_pools: new_staking_pools,
+            consumer_chains: mainnet_contract.consumer_chains,
+            cc_register_fee: mainnet_contract.cc_register_fee,
+            staking_pool_whitelist_account: mainnet_contract.staking_pool_whitelist_account,
+            slash_guarantee: mainnet_contract.slash_guarantee,
+            slashes: mainnet_contract.slashes,
+            accounts: new_accounts_map,
+            is_contract_running: mainnet_contract.is_contract_running,
+        }
+    }
+
     #[private]
     #[init(ignore_state)]
     pub fn migrate(staker_list: Vec<AccountId>) -> Self {

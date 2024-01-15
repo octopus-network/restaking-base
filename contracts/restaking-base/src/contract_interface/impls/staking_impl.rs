@@ -24,9 +24,9 @@ impl StakerAction for RestakingBaseContract {
         assert_eq!(staker.shares, 0, "Can't stake, shares is not zero");
         assert!(
             staker.select_staking_pool.is_none(),
-            "Staker({}) have selected pool({}). Need unstake first.",
+            "Staker({}) have selected pool({:?}). Need unstake first.",
             staker_id,
-            pool_id
+            staker.select_staking_pool
         );
 
         self.internal_save_staker(&staker_id, &staker);
@@ -152,44 +152,50 @@ impl StakerAction for RestakingBaseContract {
             .into();
     }
 
+    fn withdraw_unstake_batch(&mut self, pool_id: PoolId, unstake_batch_id: UnstakeBatchId) {
+        self.assert_contract_is_running();
+        let submitted_unstake_batch =
+            self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
+                assert!(staking_pool.is_unstake_batch_withdrawable(&unstake_batch_id));
+
+                staking_pool.lock();
+                staking_pool
+                    .submitted_unstake_batches
+                    .get(&unstake_batch_id)
+                    .unwrap()
+            });
+
+        ext_staking_pool::ext(pool_id.clone())
+            .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_WITHDRAW))
+            .with_unused_gas_weight(0)
+            .withdraw(submitted_unstake_batch.total_unstake_amount.into())
+            .then(
+                Self::ext(current_account_id())
+                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_WITHDRAW_UNSTAKE_BATCH_CALLBACK))
+                    .with_unused_gas_weight(0)
+                    .withdraw_unstake_batch_callback(pool_id.clone(), unstake_batch_id),
+            );
+    }
+
     fn submit_unstake_batch(&mut self, pool_id: PoolId) {
         self.assert_contract_is_running();
         let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
-        assert!(staking_pool.is_able_submit());
+        assert!(staking_pool.is_able_submit_unstake_batch());
 
         staking_pool.lock();
 
         self.internal_save_staking_pool(&staking_pool);
 
-        if let Some(last_unstake_batch_id) = staking_pool.last_unstake_batch_id {
-            let submitted_unstake_batch = staking_pool
-                .submitted_unstake_batches
-                .get(&last_unstake_batch_id)
-                .unwrap();
-            ext_staking_pool::ext(pool_id.clone())
-                .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_WITHDRAW))
-                .with_unused_gas_weight(0)
-                .withdraw(submitted_unstake_batch.total_unstake_amount.into())
-                .then(
-                    Self::ext(current_account_id())
-                        .with_static_gas(
-                            Gas::ONE_TERA.mul(TGAS_FOR_WITHDRAW_UNSTAKE_BATCH_CALLBACK),
-                        )
-                        .with_unused_gas_weight(0)
-                        .withdraw_unstake_batch_callback(pool_id.clone(), last_unstake_batch_id),
-                );
-        } else {
-            ext_staking_pool::ext(pool_id.clone())
-                .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE))
-                .with_unused_gas_weight(0)
-                .unstake(staking_pool.batched_unstake_amount.into())
-                .then(
-                    Self::ext(current_account_id())
-                        .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE_BATCH_CALLBACK))
-                        .with_unused_gas_weight(0)
-                        .submit_unstake_batch_callback(pool_id),
-                );
-        }
+        ext_staking_pool::ext(pool_id.clone())
+            .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE))
+            .with_unused_gas_weight(0)
+            .unstake(staking_pool.batched_unstake_amount.into())
+            .then(
+                Self::ext(current_account_id())
+                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_UNSTAKE_BATCH_CALLBACK))
+                    .with_unused_gas_weight(0)
+                    .submit_unstake_batch_callback(pool_id),
+            );
     }
 
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128> {
@@ -199,7 +205,7 @@ impl StakerAction for RestakingBaseContract {
         });
         let mut staking_pool = self.internal_get_staking_pool_or_panic(&pending_withdrawal.pool_id);
         assert!(
-            pending_withdrawal.is_withdrawable() && staking_pool.is_withdrawable(),
+            self.internal_is_withdrawable(&staking_pool, &pending_withdrawal),
             "unlock timestamp:{}, current timestamp:{}, current epoch: {}",
             pending_withdrawal.unlock_time,
             env::block_timestamp(),
@@ -301,9 +307,9 @@ impl StakeView for RestakingBaseContract {
             .get(&certificate)
             .unwrap();
 
-        let pool = self.internal_get_staking_pool_or_panic(&pending_withdrawal.pool_id);
+        let staking_pool = self.internal_get_staking_pool_or_panic(&pending_withdrawal.pool_id);
 
-        pending_withdrawal.is_withdrawable() && pool.is_withdrawable()
+        self.internal_is_withdrawable(&staking_pool, &pending_withdrawal)
     }
 }
 
@@ -487,35 +493,28 @@ impl StakingCallback for RestakingBaseContract {
     fn stake_after_ping(
         &mut self,
         staker_id: AccountId,
+        pool_id: PoolId,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
-            PromiseResult::Successful(_) => {
-                let pool_id =
-                    self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
-                        staking_pool.lock();
-                        staking_pool.pool_id.clone()
-                    });
-
-                ext_staking_pool::ext(pool_id)
-                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_DEPOSIT_AND_STAKE))
-                    .with_attached_deposit(env::attached_deposit())
-                    .deposit_and_stake()
-                    .function_call(
-                        "get_account_staked_balance".to_string(),
-                        json!({ "account_id": env::current_account_id() })
-                            .to_string()
-                            .into_bytes(),
-                        0,
-                        Gas::ONE_TERA.mul(TGAS_FOR_GET_ACCOUNT_STAKED_BALANCE),
-                    )
-                    .then(
-                        Self::ext(env::current_account_id())
-                            .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_INCREASE_STAKE_CALL_BACK))
-                            .stake_callback(staker_id, env::attached_deposit().into()),
-                    )
-                    .into()
-            }
+            PromiseResult::Successful(_) => ext_staking_pool::ext(pool_id.clone())
+                .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_DEPOSIT_AND_STAKE))
+                .with_attached_deposit(env::attached_deposit())
+                .deposit_and_stake()
+                .function_call(
+                    "get_account_staked_balance".to_string(),
+                    json!({ "account_id": env::current_account_id() })
+                        .to_string()
+                        .into_bytes(),
+                    0,
+                    Gas::ONE_TERA.mul(TGAS_FOR_GET_ACCOUNT_STAKED_BALANCE),
+                )
+                .then(
+                    Self::ext(env::current_account_id())
+                        .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_INCREASE_STAKE_CALL_BACK))
+                        .stake_callback(staker_id, env::attached_deposit().into(), pool_id.clone()),
+                )
+                .into(),
             PromiseResult::Failed => {
                 log!("Failed to increase stake by ping error.");
                 self.transfer_near(staker_id, env::attached_deposit());
@@ -571,6 +570,7 @@ impl StakingCallback for RestakingBaseContract {
         &mut self,
         staker_id: AccountId,
         stake_amount: U128,
+        pool_id: PoolId,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
@@ -584,7 +584,7 @@ impl StakingCallback for RestakingBaseContract {
                 let sequence = U64(self.next_sequence());
 
                 let staker_new_balance =
-                    self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+                    self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
                         let increase_shares = staking_pool.stake(
                             &mut staker,
                             stake_amount.0,
@@ -703,16 +703,14 @@ impl StakingCallback for RestakingBaseContract {
             Event::SaveStakingPool { pool_id: &pool_id }.emit();
         }
 
-        self.internal_use_staker_or_panic(&staker_id, |staker| {
-            staker.select_staking_pool = Some(pool_id.clone());
-        });
+        self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| staking_pool.lock());
 
-        self.ping(Some(pool_id))
+        self.ping(Some(pool_id.clone()))
             .then(
                 Self::ext(env::current_account_id())
                     .with_attached_deposit(env::attached_deposit())
                     .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_INCREASE_STAKE_AFTER_PING))
-                    .stake_after_ping(staker_id),
+                    .stake_after_ping(staker_id, pool_id.clone()),
             )
             .into()
     }
@@ -752,16 +750,13 @@ impl StakingCallback for RestakingBaseContract {
                 let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
                 staking_pool.last_unstake_batch_id = None;
                 staking_pool.withdraw_unstake_batch(&unstake_batch_id);
+                staking_pool.unlock();
                 self.internal_save_staking_pool(&staking_pool);
 
                 Event::WithdrawUnstakeBatch {
                     unstake_batch_id: &unstake_batch_id,
                 }
                 .emit();
-
-                ext_staking_pool::ext(pool_id.clone())
-                    .unstake(staking_pool.batched_unstake_amount.into())
-                    .then(Self::ext(current_account_id()).submit_unstake_batch_callback(pool_id));
             }
             PromiseResult::Failed => {
                 self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {

@@ -66,6 +66,15 @@ impl OwnerAction for RestakingBaseContract {
             staker.unbonding_unlock_time = env::block_timestamp();
         });
     }
+
+    #[payable]
+    fn set_staking_pool_unlock(&mut self, pool_id: PoolId) {
+        assert_one_yocto();
+        self.assert_owner();
+        self.internal_use_staking_pool_or_panic(&pool_id, |pool| {
+            pool.unlock();
+        });
+    }
 }
 
 impl RestakingBaseContract {
