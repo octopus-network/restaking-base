@@ -47,6 +47,8 @@ use std::cmp::min;
 use std::ops::Mul;
 use types::*;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct RestakingBaseContract {
@@ -98,6 +100,10 @@ impl RestakingBaseContract {
             accounts: LookupMap::new(StorageKey::Accounts),
             is_contract_running: true,
         }
+    }
+
+    pub fn version(&self) -> String {
+        VERSION.to_string()
     }
 
     pub(crate) fn transfer_near(&self, account_id: AccountId, amount: Balance) {
