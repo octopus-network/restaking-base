@@ -17,6 +17,8 @@ pub struct Staker {
     pub max_bonding_unlock_period: DurationOfSeconds,
     /// If execute unbond it'll record unlock time
     pub unbonding_unlock_time: Timestamp,
+    /// Record unbonding time of consumer chains
+    pub unbonding_consumer_chains: UnorderedMap<ConsumerChainId, Timestamp>,
 }
 
 impl Staker {
@@ -30,6 +32,11 @@ impl Staker {
             }),
             max_bonding_unlock_period: 0,
             unbonding_unlock_time: env::block_timestamp(),
+            unbonding_consumer_chains: UnorderedMap::new(
+                StorageKey::StakerUnbondingConsumerChains {
+                    staker_id: staker_id.clone(),
+                },
+            ),
         }
     }
 
@@ -78,10 +85,11 @@ impl Staker {
                 .as_str(),
             );
 
-        self.unbonding_unlock_time = max(
-            self.unbonding_unlock_time,
-            env::block_timestamp() + seconds_to_nanoseconds(unbonding_period),
-        );
+        let unlock_timestamp = env::block_timestamp() + seconds_to_nanoseconds(unbonding_period);
+        self.unbonding_unlock_time = max(self.unbonding_unlock_time, unlock_timestamp);
+
+        self.unbonding_consumer_chains
+            .insert(consumer_chain_id, &unlock_timestamp);
 
         self.max_bonding_unlock_period = self
             .bonding_consumer_chains
@@ -91,11 +99,40 @@ impl Staker {
             .unwrap_or(0);
     }
 
+    pub fn unstake(&mut self) {
+        let unlock_timestamp =
+            env::block_timestamp() + seconds_to_nanoseconds(self.max_bonding_unlock_period);
+        self.unbonding_unlock_time = max(self.unbonding_unlock_time, unlock_timestamp);
+        self.max_bonding_unlock_period = 0;
+        let bonding_consumer_chains = self.bonding_consumer_chains.keys().collect_vec();
+        for bonding_consumer_chain in bonding_consumer_chains {
+            let unbonding_period = self
+                .bonding_consumer_chains
+                .remove(&bonding_consumer_chain)
+                .unwrap();
+            let unlock_timestamp =
+                env::block_timestamp() + seconds_to_nanoseconds(unbonding_period);
+            self.unbonding_consumer_chains
+                .insert(&bonding_consumer_chain, &unlock_timestamp);
+        }
+    }
+
     pub fn get_unlock_time(&self) -> Timestamp {
         max(
             self.unbonding_unlock_time,
             env::block_timestamp() + seconds_to_nanoseconds(self.max_bonding_unlock_period),
         )
+    }
+
+    pub fn allow_slash(&self, consumer_chain_id: &ConsumerChainId) -> bool {
+        self.bonding_consumer_chains
+            .get(consumer_chain_id)
+            .is_some()
+            || self
+                .unbonding_consumer_chains
+                .get(consumer_chain_id)
+                .map(|unlock_timestamp| unlock_timestamp > env::block_timestamp())
+                .unwrap_or(false)
     }
 }
 

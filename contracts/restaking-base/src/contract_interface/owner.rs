@@ -13,4 +13,5 @@ pub trait OwnerAction {
         new_beneficiary: AccountId,
     );
     fn set_staker_unbonding_unlock_time_as_current_time(&mut self, staker_id: AccountId);
+    fn set_staking_pool_unlock(&mut self, pool_id: PoolId);
 }

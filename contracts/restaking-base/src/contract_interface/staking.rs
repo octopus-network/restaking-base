@@ -14,6 +14,8 @@ pub trait StakerAction {
         beneficiary: Option<AccountId>,
         withdraw_by_anyone: Option<bool>,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
+    fn withdraw_unstake_batch(&mut self, pool_id: PoolId, unstake_batch_id: UnstakeBatchId);
+    fn submit_unstake_batch(&mut self, pool_id: PoolId);
     fn withdraw(&mut self, staker: AccountId, id: WithdrawalCertificate) -> PromiseOrValue<U128>;
 }
 
@@ -28,6 +30,7 @@ pub trait StakingCallback {
     fn stake_after_ping(
         &mut self,
         staker_id: AccountId,
+        pool_id: PoolId,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn increase_stake_after_ping(
@@ -39,30 +42,13 @@ pub trait StakingCallback {
         &mut self,
         staker_id: AccountId,
         stake_amount: U128,
+        pool_id: PoolId,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn increase_stake_callback(
         &mut self,
         staker_id: AccountId,
         increase_amount: U128,
-    ) -> PromiseOrValue<Option<StakingChangeResult>>;
-
-    fn decrease_stake_callback(
-        &mut self,
-        staker_id: AccountId,
-        decrease_share_balance: U128,
-        decrease_amount: U128,
-        beneficiary: AccountId,
-        slash_governance: Option<AccountId>,
-    ) -> PromiseOrValue<Option<StakingChangeResult>>;
-
-    fn unstake_callback(
-        &mut self,
-        staker_id: AccountId,
-        decrease_share_balance: U128,
-        receive_amount: U128,
-        beneficiary: AccountId,
-        withdraw_by_anyone: bool,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn decrease_stake_after_ping(
@@ -84,6 +70,14 @@ pub trait StakingCallback {
         account_id: AccountId,
         pending_withdrawal: PendingWithdrawal,
     ) -> PromiseOrValue<U128>;
+
+    fn submit_unstake_batch_callback(&mut self, pool_id: PoolId);
+
+    fn withdraw_unstake_batch_callback(
+        &mut self,
+        pool_id: PoolId,
+        unstake_batch_id: UnstakeBatchId,
+    );
 
     fn ping_callback(&mut self, pool_id: PoolId);
 }

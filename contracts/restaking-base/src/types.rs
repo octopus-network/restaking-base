@@ -11,6 +11,7 @@ pub type SlashId = U64;
 pub type WithdrawalCertificate = U64;
 pub type ValidatorSet = Vec<(AccountId, U128)>;
 pub type Sequence = U64;
+pub type UnstakeBatchId = U64;
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]

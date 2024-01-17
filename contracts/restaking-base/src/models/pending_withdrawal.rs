@@ -15,6 +15,7 @@ pub struct PendingWithdrawal {
     pub unlock_time: Timestamp,
     pub beneficiary: AccountId,
     pub allow_other_withdraw: bool,
+    pub unstake_batch_id: Option<UnstakeBatchId>,
 }
 
 impl PendingWithdrawal {
@@ -26,6 +27,7 @@ impl PendingWithdrawal {
         unlock_time: Timestamp,
         beneficiary: AccountId,
         allow_other_withdraw: bool,
+        unstake_batch_id: UnstakeBatchId,
     ) -> PendingWithdrawal {
         Self {
             withdrawal_certificate,
@@ -35,12 +37,12 @@ impl PendingWithdrawal {
             unlock_time,
             beneficiary,
             allow_other_withdraw,
+            unstake_batch_id: Some(unstake_batch_id),
         }
     }
 
     pub fn is_withdrawable(&self) -> bool {
-        return env::block_timestamp() >= self.unlock_time
-            && env::epoch_height() >= self.unlock_epoch;
+        return env::block_timestamp() >= self.unlock_time;
     }
 
     pub fn slash(
@@ -62,6 +64,22 @@ impl PendingWithdrawal {
             unlock_time: env::block_timestamp(),
             beneficiary,
             allow_other_withdraw: true,
+            unstake_batch_id: self.unstake_batch_id.clone(),
+        }
+    }
+}
+
+impl RestakingBaseContract {
+    pub(crate) fn internal_is_withdrawable(
+        &self,
+        staking_pool: &StakingPool,
+        pending_withdrawal: &PendingWithdrawal,
+    ) -> bool {
+        assert_eq!(pending_withdrawal.pool_id, staking_pool.pool_id);
+        if let Some(unstake_batch_id) = pending_withdrawal.unstake_batch_id {
+            staking_pool.is_unstake_batch_withdrawn(&unstake_batch_id)
+        } else {
+            pending_withdrawal.is_withdrawable() && staking_pool.is_withdrawable()
         }
     }
 }
