@@ -100,9 +100,12 @@ pub enum Event<'a> {
     },
     WithdrawUnstakeBatch {
         unstake_batch_id: &'a UnstakeBatchId,
+        pool_id: &'a PoolId,
+        epoch_height: &'a U64,
     },
     SubmitUnstakeBatch {
-        unstake_batch_id: &'a UnstakeBatchId,
+        submitted_unstake_batch: &'a SubmittedUnstakeBatch,
+        staking_pool: &'a StakingPoolInfo,
     },
 }
 

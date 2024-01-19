@@ -199,7 +199,14 @@ impl StakingPool {
         }
     }
 
-    pub fn submit_unstake(&mut self) {
+    pub fn submit_unstake(&mut self) -> SubmittedUnstakeBatch {
+        let submitted_unstake_batch = SubmittedUnstakeBatch {
+            unstake_batch_id: self.current_unstake_batch_id,
+            submit_unstake_epoch: env::epoch_height(),
+            total_unstake_amount: self.batched_unstake_amount,
+            claimed_amount: 0,
+            is_withdrawn: false,
+        };
         self.submitted_unstake_batches.insert(
             &self.current_unstake_batch_id,
             &SubmittedUnstakeBatch {
@@ -217,6 +224,8 @@ impl StakingPool {
         self.batched_unstake_amount = 0;
 
         self.unlock_epoch = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
+
+        submitted_unstake_batch
     }
 
     pub fn withdraw_unstake_batch(&mut self, unstake_batch_id: &UnstakeBatchId) {
@@ -245,8 +254,7 @@ impl StakingPool {
     pub fn is_unstake_batch_withdrawn(&self, unstake_batch_id: &UnstakeBatchId) -> bool {
         self.submitted_unstake_batches
             .get(unstake_batch_id)
-            .unwrap()
-            .is_withdrawn
+            .is_some_and(|e|e.is_withdrawn)
     }
 
     pub fn stake(

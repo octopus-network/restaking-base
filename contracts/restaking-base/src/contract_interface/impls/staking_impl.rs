@@ -721,13 +721,16 @@ impl StakingCallback for RestakingBaseContract {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
                 let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
-                Event::SubmitUnstakeBatch {
-                    unstake_batch_id: &staking_pool.current_unstake_batch_id,
-                }
-                .emit();
-                staking_pool.submit_unstake();
+
+                let submitted_unstake_batch = staking_pool.submit_unstake();
                 staking_pool.unlock();
                 self.internal_save_staking_pool(&staking_pool);
+
+                Event::SubmitUnstakeBatch {
+                    submitted_unstake_batch: &submitted_unstake_batch,
+                    staking_pool: &staking_pool.into(),
+                }
+                .emit();
             }
             PromiseResult::Failed => {
                 self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
@@ -755,6 +758,8 @@ impl StakingCallback for RestakingBaseContract {
 
                 Event::WithdrawUnstakeBatch {
                     unstake_batch_id: &unstake_batch_id,
+                    pool_id: &pool_id,
+                    epoch_height: &env::epoch_height().into(),
                 }
                 .emit();
             }
