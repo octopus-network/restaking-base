@@ -77,7 +77,8 @@ impl RestakingBaseContract {
     ) -> bool {
         assert_eq!(pending_withdrawal.pool_id, staking_pool.pool_id);
         if let Some(unstake_batch_id) = pending_withdrawal.unstake_batch_id {
-            staking_pool.is_unstake_batch_withdrawn(&unstake_batch_id)
+            pending_withdrawal.is_withdrawable()
+                && staking_pool.is_unstake_batch_withdrawn(&unstake_batch_id)
         } else {
             pending_withdrawal.is_withdrawable() && staking_pool.is_withdrawable()
         }
