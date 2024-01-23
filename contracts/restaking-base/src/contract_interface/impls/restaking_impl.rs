@@ -486,19 +486,17 @@ impl RestakingBaseContract {
             staking_pool.staked_amount_from_shares_balance_rounded_down(staker.shares);
 
         // 2. Decrease min of staker_total_staked_balance and slash_amount
-        let decrease_shares =
+        let mut decrease_shares =
             staking_pool.calculate_decrease_shares(min(staker_total_staked_balance, slash_amount));
+        decrease_shares = min(decrease_shares, staker.shares);
+        staker.shares = staker.shares - decrease_shares;
+
+        staking_pool.decrease_stake(decrease_shares);
 
         // 3. decrease shares and actually receive amount
         let receive_amount =
             staking_pool.staked_amount_from_shares_balance_rounded_down(decrease_shares);
 
-        staker.shares = staker
-            .shares
-            .checked_sub(decrease_shares)
-            .expect("Failed decrease shares in staker.");
-
-        staking_pool.decrease_stake(decrease_shares);
         let unstake_batch_id = staking_pool.batch_unstake(receive_amount);
 
         let pending_withdrawal = PendingWithdrawal::new(
