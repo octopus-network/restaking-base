@@ -387,23 +387,6 @@ impl StakingPool {
             / U256::from(self.total_share_balance))
         .as_u128()
     }
-
-    /// Returns the staked amount rounded up corresponding to the given number of "stake" shares.
-    ///
-    /// Rounding up division of `a / b` is done using `(a + b - 1) / b`.
-    pub(crate) fn staked_amount_from_shares_balance_rounded_up(
-        &self,
-        share_balance: ShareBalance,
-    ) -> Balance {
-        assert!(
-            self.total_share_balance > 0,
-            "The total number of stake shares can't be 0"
-        );
-        ((U256::from(self.remain_staked_balance()) * U256::from(share_balance)
-            + U256::from(self.total_share_balance - 1))
-            / U256::from(self.total_share_balance))
-        .as_u128()
-    }
 }
 
 impl RestakingBaseContract {

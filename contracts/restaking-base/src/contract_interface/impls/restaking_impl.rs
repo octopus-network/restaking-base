@@ -462,7 +462,7 @@ impl RestakingBaseContract {
 
         // 1. Get staker staked balance
         let staker_total_staked_balance =
-            staking_pool.staked_amount_from_shares_balance_rounded_up(staker.shares);
+            staking_pool.staked_amount_from_shares_balance_rounded_down(staker.shares);
 
         // 2. Decrease min of staker_total_staked_balance and slash_amount
         let decrease_shares =
@@ -470,7 +470,7 @@ impl RestakingBaseContract {
 
         // 3. decrease shares and actually receive amount
         let receive_amount =
-            staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+            staking_pool.staked_amount_from_shares_balance_rounded_down(decrease_shares);
 
         staker.shares = staker
             .shares

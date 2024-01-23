@@ -366,7 +366,7 @@ impl StakingCallback for RestakingBaseContract {
 
                 let decrease_shares = staker.shares;
                 let receive_amount =
-                    staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+                    staking_pool.staked_amount_from_shares_balance_rounded_down(decrease_shares);
                 staker.shares = 0;
 
                 let unstake_batch_id = staking_pool.batch_unstake(receive_amount);
@@ -443,7 +443,7 @@ impl StakingCallback for RestakingBaseContract {
 
                 let decrease_shares = staking_pool.calculate_decrease_shares(decrease_amount.0);
                 let receive_amount =
-                    staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+                    staking_pool.staked_amount_from_shares_balance_rounded_down(decrease_shares);
                 staker.shares = staker
                     .shares
                     .checked_sub(decrease_shares)
