@@ -205,6 +205,7 @@ impl GovernanceAction for RestakingBaseContract {
 impl StakerRestakingAction for RestakingBaseContract {
     #[payable]
     fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool> {
+        self.assert_contract_is_running();
         self.assert_attached_storage_fee();
 
         let staker_id = env::predecessor_account_id();
@@ -244,6 +245,7 @@ impl StakerRestakingAction for RestakingBaseContract {
 
     #[payable]
     fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) {
+        self.assert_contract_is_running();
         assert_one_yocto();
 
         // 1. check if bonding
@@ -266,6 +268,7 @@ impl StakerRestakingAction for RestakingBaseContract {
 
     #[payable]
     fn unbond(&mut self, consumer_chain_id: ConsumerChainId) {
+        self.assert_contract_is_running();
         assert_one_yocto();
         let staker_id = env::predecessor_account_id();
         self.internal_use_staker_or_panic(&staker_id, |staker| staker.unbond(&consumer_chain_id));
