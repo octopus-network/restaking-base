@@ -210,6 +210,24 @@ impl StakerRestakingAction for RestakingBaseContract {
         let staker_id = env::predecessor_account_id();
         let consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
 
+        consumer_chain.assert_chain_active();
+        assert!(
+            !consumer_chain.blacklist.contains(&staker_id),
+            "Failed to bond, {} has been blacklisted by {}",
+            staker_id,
+            consumer_chain.consumer_chain_id
+        );
+
+        let staker = self.internal_get_staker_or_panic(&staker_id);
+
+        assert!(
+            staker.unbonding_unlock_time <= env::block_timestamp(),
+            "Failed to bond by {}, the unbonding unlock time({}) should not greater then block time({}).",
+            staker_id,
+            staker.unbonding_unlock_time,
+            env::block_timestamp()
+        );
+
         self.ping(Option::None)
             .then(
                 ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
