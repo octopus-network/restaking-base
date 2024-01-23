@@ -246,7 +246,7 @@ impl StakerRestakingAction for RestakingBaseContract {
     #[payable]
     fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) {
         self.assert_contract_is_running();
-        assert_one_yocto();
+        assert_attached_near();
 
         // 1. check if bonding
         let staker = self.internal_get_staker_or_panic(&env::predecessor_account_id());
