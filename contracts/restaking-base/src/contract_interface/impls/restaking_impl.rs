@@ -232,7 +232,7 @@ impl StakerRestakingAction for RestakingBaseContract {
         self.ping(Option::None)
             .then(
                 ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
-                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_CHANGE_KEY))
+                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_BOND))
                     .bond(staker_id.clone(), key.clone()),
             )
             .then(
