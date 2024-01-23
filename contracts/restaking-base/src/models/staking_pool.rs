@@ -254,7 +254,7 @@ impl StakingPool {
     pub fn is_unstake_batch_withdrawn(&self, unstake_batch_id: &UnstakeBatchId) -> bool {
         self.submitted_unstake_batches
             .get(unstake_batch_id)
-            .is_some_and(|e|e.is_withdrawn)
+            .is_some_and(|e| e.is_withdrawn)
     }
 
     pub fn stake(

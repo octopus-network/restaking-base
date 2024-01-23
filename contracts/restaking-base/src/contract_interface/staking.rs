@@ -24,7 +24,6 @@ pub trait StakingCallback {
         &mut self,
         staker_id: AccountId,
         pool_id: PoolId,
-        whitelisted: bool,
     ) -> PromiseOrValue<Option<StakingChangeResult>>;
 
     fn stake_after_ping(
