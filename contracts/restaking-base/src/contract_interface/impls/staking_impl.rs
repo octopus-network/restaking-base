@@ -796,7 +796,6 @@ impl StakingCallback for RestakingBaseContract {
 
                 self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
                     staking_pool.total_staked_balance = staked_balance.0;
-                    staking_pool.unlock();
                 });
 
                 Event::Ping {
@@ -806,9 +805,6 @@ impl StakingCallback for RestakingBaseContract {
                 .emit();
             }
             PromiseResult::Failed => {
-                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
-                    staking_pool.unlock();
-                });
                 emit_callback_failed_event();
             }
         }
