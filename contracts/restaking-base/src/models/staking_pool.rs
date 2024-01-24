@@ -300,7 +300,7 @@ impl StakingPool {
     pub fn calculate_increase_shares(&self, increase_near_amount: Balance) -> ShareBalance {
         assert!(
             increase_near_amount > 0,
-            "Increase delegation amount should be positvie"
+            "Increase delegation amount should be positive"
         );
         let increase_shares =
             self.share_balance_from_staked_amount_rounded_down(increase_near_amount);
