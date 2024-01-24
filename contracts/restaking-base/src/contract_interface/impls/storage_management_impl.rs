@@ -16,13 +16,13 @@ impl StorageManagement for RestakingBaseContract {
         let account_id = account_id.unwrap_or(env::predecessor_account_id());
         let exist = self.accounts.contains_key(&account_id);
         if exist {
-            self.transfer_near(account_id.clone(), env::attached_deposit())
+            self.transfer_near(env::predecessor_account_id(), env::attached_deposit())
         } else {
             assert!(env::attached_deposit() >= REGISTER_STORAGE_FEE);
             self.internal_save_account(&account_id, &Account::new(account_id.clone()));
             if env::attached_deposit() > REGISTER_STORAGE_FEE {
                 self.transfer_near(
-                    account_id.clone(),
+                    env::predecessor_account_id(),
                     env::attached_deposit() - REGISTER_STORAGE_FEE,
                 )
             }
