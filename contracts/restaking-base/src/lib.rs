@@ -32,6 +32,7 @@ use models::staker::StakingChangeResult;
 use models::staking_pool::StakingPool;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
+use near_sdk::env::STORAGE_PRICE_PER_BYTE;
 use near_sdk::json_types::U128;
 use near_sdk::json_types::U64;
 use near_sdk::serde::{Deserialize, Serialize};
@@ -108,6 +109,7 @@ impl RestakingBaseContract {
 
     pub(crate) fn transfer_near(&self, account_id: AccountId, amount: Balance) {
         assert!(amount > 0, "Failed to send near because the amount is 0.");
+        assert!(account_available_amount() >= amount, "Failed to send near because account available balance less than the amount.");
         log!("transfer {} to {}", amount, account_id);
         Promise::new(account_id).transfer(amount);
     }
