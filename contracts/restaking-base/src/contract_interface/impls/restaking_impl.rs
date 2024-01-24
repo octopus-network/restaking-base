@@ -133,12 +133,7 @@ impl GovernanceAction for RestakingBaseContract {
             .as_str(),
         );
         // check if predecessor is consumer chain governance
-        assert_eq!(
-            consumer_chain.governance,
-            env::predecessor_account_id(),
-            "Only cc_gov({}) can update_consumer_chain_info",
-            consumer_chain.governance
-        );
+        consumer_chain.assert_cc_gov();
 
         // Update unbonding period for every stakers.
         if let Some(new_unbonding_period) = update_param.unbonding_period {
