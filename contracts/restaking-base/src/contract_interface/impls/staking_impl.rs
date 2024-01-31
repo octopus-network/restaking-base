@@ -612,12 +612,10 @@ impl StakingCallback for RestakingBaseContract {
                 }));
             }
             PromiseResult::Failed => {
-                let mut staker = self.internal_get_staker_or_panic(&staker_id);
-                staker.select_staking_pool = None;
+                self.internal_use_staker_staking_pool_or_panic(&staker_id, |pool| pool.unlock());
                 self.internal_use_staker_or_panic(&staker_id, |staker| {
                     staker.select_staking_pool = None
                 });
-                self.internal_use_staker_staking_pool_or_panic(&staker_id, |pool| pool.unlock());
                 self.transfer_near(staker_id, stake_amount.0);
                 emit_callback_failed_event();
                 return PromiseOrValue::Value(None);
