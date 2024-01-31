@@ -709,18 +709,25 @@ impl StakingCallback for RestakingBaseContract {
                     Event::SaveStakingPool { pool_id: &pool_id }.emit();
                 }
 
-                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
-                    staking_pool.lock()
-                });
+                let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
+                if staking_pool.locked {
+                    self.transfer_near(staker_id, env::attached_deposit());
+                    return PromiseOrValue::Value(None);
+                } else {
+                    staking_pool.lock();
+                    self.internal_save_staking_pool(&staking_pool);
 
-                self.ping(Some(pool_id.clone()))
-                    .then(
-                        Self::ext(env::current_account_id())
-                            .with_attached_deposit(env::attached_deposit())
-                            .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_INCREASE_STAKE_AFTER_PING))
-                            .stake_after_ping(staker_id, pool_id.clone()),
-                    )
-                    .into()
+                    self.ping(Some(pool_id.clone()))
+                        .then(
+                            Self::ext(env::current_account_id())
+                                .with_attached_deposit(env::attached_deposit())
+                                .with_static_gas(
+                                    Gas::ONE_TERA.mul(TGAS_FOR_INCREASE_STAKE_AFTER_PING),
+                                )
+                                .stake_after_ping(staker_id, pool_id.clone()),
+                        )
+                        .into()
+                }
             }
             PromiseResult::Failed => {
                 self.transfer_near(staker_id, env::attached_deposit());

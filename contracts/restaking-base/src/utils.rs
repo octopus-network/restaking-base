@@ -11,7 +11,7 @@ pub fn seconds_to_nanoseconds(seconds: DurationOfSeconds) -> Duration {
     seconds * 1_000_000_000
 }
 
-pub fn account_available_amount()->u128{
+pub fn account_available_amount() -> u128 {
     env::account_balance() - env::STORAGE_PRICE_PER_BYTE * env::storage_usage() as u128
 }
 
