@@ -108,7 +108,12 @@ impl RestakingBaseContract {
 
     pub(crate) fn transfer_near(&self, account_id: AccountId, amount: Balance) {
         assert!(amount > 0, "Failed to send near because the amount is 0.");
-        log!("transfer {} to {}, account available balance is {}", amount, account_id, account_available_amount());
+        log!(
+            "transfer {} to {}, account available balance is {}",
+            amount,
+            account_id,
+            account_available_amount()
+        );
         Promise::new(account_id).transfer(amount);
     }
 

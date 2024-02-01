@@ -157,12 +157,13 @@ impl StakingPool {
     }
 
     pub fn is_unstake_batch_withdrawable(&self, unstake_batch_id: &UnstakeBatchId) -> bool {
-        self.submitted_unstake_batches
+        let submitted_unstake_batch = self
+            .submitted_unstake_batches
             .get(&unstake_batch_id)
-            .unwrap()
-            .submit_unstake_epoch
-            + NUM_EPOCHS_TO_UNLOCK
-            <= env::epoch_height()
+            .unwrap();
+        submitted_unstake_batch.is_withdrawn == false
+            && submitted_unstake_batch.submit_unstake_epoch + NUM_EPOCHS_TO_UNLOCK
+                <= env::epoch_height()
     }
 
     pub fn remain_staked_balance(&self) -> Balance {

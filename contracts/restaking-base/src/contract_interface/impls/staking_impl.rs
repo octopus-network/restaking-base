@@ -516,7 +516,9 @@ impl StakingCallback for RestakingBaseContract {
                 )
                 .into(),
             PromiseResult::Failed => {
-                self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| staking_pool.unlock());
+                self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+                    staking_pool.unlock()
+                });
                 self.transfer_near(staker_id, env::attached_deposit());
                 emit_callback_failed_event();
                 return PromiseOrValue::Value(None);
@@ -557,7 +559,9 @@ impl StakingCallback for RestakingBaseContract {
                     .into()
             }
             PromiseResult::Failed => {
-                self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| staking_pool.unlock());
+                self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+                    staking_pool.unlock()
+                });
                 self.transfer_near(staker_id, env::attached_deposit());
                 emit_callback_failed_event();
                 return PromiseOrValue::Value(None);
