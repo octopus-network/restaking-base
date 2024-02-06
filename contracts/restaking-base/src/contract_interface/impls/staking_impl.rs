@@ -366,7 +366,7 @@ impl StakingCallback for RestakingBaseContract {
 
                 let decrease_shares = staker.shares;
                 let receive_amount =
-                    staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+                    staking_pool.staked_amount_from_shares_balance_rounded_down(decrease_shares);
                 staker.shares = 0;
 
                 let unstake_batch_id = staking_pool.batch_unstake(receive_amount);
@@ -443,7 +443,7 @@ impl StakingCallback for RestakingBaseContract {
 
                 let decrease_shares = staking_pool.calculate_decrease_shares(decrease_amount.0);
                 let receive_amount =
-                    staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+                    staking_pool.staked_amount_from_shares_balance_rounded_down(decrease_shares);
                 staker.shares = staker
                     .shares
                     .checked_sub(decrease_shares)
@@ -516,7 +516,9 @@ impl StakingCallback for RestakingBaseContract {
                 )
                 .into(),
             PromiseResult::Failed => {
-                log!("Failed to increase stake by ping error.");
+                self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+                    staking_pool.unlock()
+                });
                 self.transfer_near(staker_id, env::attached_deposit());
                 emit_callback_failed_event();
                 return PromiseOrValue::Value(None);
@@ -557,7 +559,9 @@ impl StakingCallback for RestakingBaseContract {
                     .into()
             }
             PromiseResult::Failed => {
-                log!("Failed to increase stake by ping error.");
+                self.internal_use_staker_staking_pool_or_panic(&staker_id, |staking_pool| {
+                    staking_pool.unlock()
+                });
                 self.transfer_near(staker_id, env::attached_deposit());
                 emit_callback_failed_event();
                 return PromiseOrValue::Value(None);
@@ -612,12 +616,10 @@ impl StakingCallback for RestakingBaseContract {
                 }));
             }
             PromiseResult::Failed => {
-                let mut staker = self.internal_get_staker_or_panic(&staker_id);
-                staker.select_staking_pool = None;
+                self.internal_use_staker_staking_pool_or_panic(&staker_id, |pool| pool.unlock());
                 self.internal_use_staker_or_panic(&staker_id, |staker| {
                     staker.select_staking_pool = None
                 });
-                self.internal_use_staker_staking_pool_or_panic(&staker_id, |pool| pool.unlock());
                 self.transfer_near(staker_id, stake_amount.0);
                 emit_callback_failed_event();
                 return PromiseOrValue::Value(None);
@@ -691,28 +693,50 @@ impl StakingCallback for RestakingBaseContract {
         &mut self,
         staker_id: AccountId,
         pool_id: PoolId,
-        #[callback] whitelisted: bool,
     ) -> PromiseOrValue<Option<StakingChangeResult>> {
-        if !whitelisted {
-            log!("Failed to select pool, {} is not whitelisted.", pool_id);
-            return PromiseOrValue::Value(None);
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Successful(value) => {
+                let whitelisted = near_sdk::serde_json::from_slice::<bool>(&value)
+                    .expect("Failed to deserialize in increase_stake_callback by value.");
+
+                if !whitelisted {
+                    log!("Failed to select pool, {} is not whitelisted.", pool_id);
+                    self.transfer_near(staker_id, env::attached_deposit());
+                    return PromiseOrValue::Value(None);
+                }
+
+                if !self.staking_pools.get(&pool_id).is_some() {
+                    self.internal_save_staking_pool(&StakingPool::new(pool_id.clone()));
+                    Event::SaveStakingPool { pool_id: &pool_id }.emit();
+                }
+
+                let mut staking_pool = self.internal_get_staking_pool_or_panic(&pool_id);
+                if staking_pool.locked {
+                    self.transfer_near(staker_id, env::attached_deposit());
+                    return PromiseOrValue::Value(None);
+                } else {
+                    staking_pool.lock();
+                    self.internal_save_staking_pool(&staking_pool);
+
+                    self.ping(Some(pool_id.clone()))
+                        .then(
+                            Self::ext(env::current_account_id())
+                                .with_attached_deposit(env::attached_deposit())
+                                .with_static_gas(
+                                    Gas::ONE_TERA.mul(TGAS_FOR_INCREASE_STAKE_AFTER_PING),
+                                )
+                                .stake_after_ping(staker_id, pool_id.clone()),
+                        )
+                        .into()
+                }
+            }
+            PromiseResult::Failed => {
+                self.transfer_near(staker_id, env::attached_deposit());
+                emit_callback_failed_event();
+                return PromiseOrValue::Value(None);
+            }
         }
-
-        if !self.staking_pools.get(&pool_id).is_some() {
-            self.internal_save_staking_pool(&StakingPool::new(pool_id.clone()));
-            Event::SaveStakingPool { pool_id: &pool_id }.emit();
-        }
-
-        self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| staking_pool.lock());
-
-        self.ping(Some(pool_id.clone()))
-            .then(
-                Self::ext(env::current_account_id())
-                    .with_attached_deposit(env::attached_deposit())
-                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_INCREASE_STAKE_AFTER_PING))
-                    .stake_after_ping(staker_id, pool_id.clone()),
-            )
-            .into()
     }
 
     #[private]
@@ -781,7 +805,6 @@ impl StakingCallback for RestakingBaseContract {
 
                 self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
                     staking_pool.total_staked_balance = staked_balance.0;
-                    staking_pool.unlock();
                 });
 
                 Event::Ping {
@@ -791,9 +814,6 @@ impl StakingCallback for RestakingBaseContract {
                 .emit();
             }
             PromiseResult::Failed => {
-                self.internal_use_staking_pool_or_panic(&pool_id, |staking_pool| {
-                    staking_pool.unlock();
-                });
                 emit_callback_failed_event();
             }
         }

@@ -133,12 +133,7 @@ impl GovernanceAction for RestakingBaseContract {
             .as_str(),
         );
         // check if predecessor is consumer chain governance
-        assert_eq!(
-            consumer_chain.governance,
-            env::predecessor_account_id(),
-            "Only cc_gov({}) can update_consumer_chain_info",
-            consumer_chain.governance
-        );
+        consumer_chain.assert_cc_gov();
 
         // Update unbonding period for every stakers.
         if let Some(new_unbonding_period) = update_param.unbonding_period {
@@ -205,15 +200,34 @@ impl GovernanceAction for RestakingBaseContract {
 impl StakerRestakingAction for RestakingBaseContract {
     #[payable]
     fn bond(&mut self, consumer_chain_id: ConsumerChainId, key: String) -> PromiseOrValue<bool> {
+        self.assert_contract_is_running();
         self.assert_attached_storage_fee();
 
         let staker_id = env::predecessor_account_id();
         let consumer_chain = self.internal_get_consumer_chain_or_panic(&consumer_chain_id);
 
+        consumer_chain.assert_chain_active();
+        assert!(
+            !consumer_chain.blacklist.contains(&staker_id),
+            "Failed to bond, {} has been blacklisted by {}",
+            staker_id,
+            consumer_chain.consumer_chain_id
+        );
+
+        let staker = self.internal_get_staker_or_panic(&staker_id);
+
+        assert!(
+            staker.unbonding_unlock_time <= env::block_timestamp(),
+            "Failed to bond by {}, the unbonding unlock time({}) should not greater then block time({}).",
+            staker_id,
+            staker.unbonding_unlock_time,
+            env::block_timestamp()
+        );
+
         self.ping(Option::None)
             .then(
                 ext_consumer_chain_pos::ext(consumer_chain.pos_account_id)
-                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_CHANGE_KEY))
+                    .with_static_gas(Gas::ONE_TERA.mul(TGAS_FOR_BOND))
                     .bond(staker_id.clone(), key.clone()),
             )
             .then(
@@ -226,7 +240,8 @@ impl StakerRestakingAction for RestakingBaseContract {
 
     #[payable]
     fn change_key(&mut self, consumer_chain_id: ConsumerChainId, new_key: String) {
-        assert_one_yocto();
+        self.assert_contract_is_running();
+        assert_attached_near();
 
         // 1. check if bonding
         let staker = self.internal_get_staker_or_panic(&env::predecessor_account_id());
@@ -248,6 +263,7 @@ impl StakerRestakingAction for RestakingBaseContract {
 
     #[payable]
     fn unbond(&mut self, consumer_chain_id: ConsumerChainId) {
+        self.assert_contract_is_running();
         assert_one_yocto();
         let staker_id = env::predecessor_account_id();
         self.internal_use_staker_or_panic(&staker_id, |staker| staker.unbond(&consumer_chain_id));
@@ -462,22 +478,20 @@ impl RestakingBaseContract {
 
         // 1. Get staker staked balance
         let staker_total_staked_balance =
-            staking_pool.staked_amount_from_shares_balance_rounded_up(staker.shares);
+            staking_pool.staked_amount_from_shares_balance_rounded_down(staker.shares);
 
         // 2. Decrease min of staker_total_staked_balance and slash_amount
-        let decrease_shares =
+        let mut decrease_shares =
             staking_pool.calculate_decrease_shares(min(staker_total_staked_balance, slash_amount));
+        decrease_shares = min(decrease_shares, staker.shares);
+        staker.shares = staker.shares - decrease_shares;
+
+        staking_pool.decrease_stake(decrease_shares);
 
         // 3. decrease shares and actually receive amount
         let receive_amount =
-            staking_pool.staked_amount_from_shares_balance_rounded_up(decrease_shares);
+            staking_pool.staked_amount_from_shares_balance_rounded_down(decrease_shares);
 
-        staker.shares = staker
-            .shares
-            .checked_sub(decrease_shares)
-            .expect("Failed decrease shares in staker.");
-
-        staking_pool.decrease_stake(decrease_shares);
         let unstake_batch_id = staking_pool.batch_unstake(receive_amount);
 
         let pending_withdrawal = PendingWithdrawal::new(

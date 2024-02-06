@@ -157,12 +157,13 @@ impl StakingPool {
     }
 
     pub fn is_unstake_batch_withdrawable(&self, unstake_batch_id: &UnstakeBatchId) -> bool {
-        self.submitted_unstake_batches
+        let submitted_unstake_batch = self
+            .submitted_unstake_batches
             .get(&unstake_batch_id)
-            .unwrap()
-            .submit_unstake_epoch
-            + NUM_EPOCHS_TO_UNLOCK
-            <= env::epoch_height()
+            .unwrap();
+        submitted_unstake_batch.is_withdrawn == false
+            && submitted_unstake_batch.submit_unstake_epoch + NUM_EPOCHS_TO_UNLOCK
+                <= env::epoch_height()
     }
 
     pub fn remain_staked_balance(&self) -> Balance {
@@ -254,7 +255,7 @@ impl StakingPool {
     pub fn is_unstake_batch_withdrawn(&self, unstake_batch_id: &UnstakeBatchId) -> bool {
         self.submitted_unstake_batches
             .get(unstake_batch_id)
-            .is_some_and(|e|e.is_withdrawn)
+            .is_some_and(|e| e.is_withdrawn)
     }
 
     pub fn stake(
@@ -300,7 +301,7 @@ impl StakingPool {
     pub fn calculate_increase_shares(&self, increase_near_amount: Balance) -> ShareBalance {
         assert!(
             increase_near_amount > 0,
-            "Increase delegation amount should be positvie"
+            "Increase delegation amount should be positive"
         );
         let increase_shares =
             self.share_balance_from_staked_amount_rounded_down(increase_near_amount);
@@ -384,23 +385,6 @@ impl StakingPool {
         let remain_staked_balance = self.remain_staked_balance();
 
         (U256::from(remain_staked_balance) * U256::from(share_balance)
-            / U256::from(self.total_share_balance))
-        .as_u128()
-    }
-
-    /// Returns the staked amount rounded up corresponding to the given number of "stake" shares.
-    ///
-    /// Rounding up division of `a / b` is done using `(a + b - 1) / b`.
-    pub(crate) fn staked_amount_from_shares_balance_rounded_up(
-        &self,
-        share_balance: ShareBalance,
-    ) -> Balance {
-        assert!(
-            self.total_share_balance > 0,
-            "The total number of stake shares can't be 0"
-        );
-        ((U256::from(self.remain_staked_balance()) * U256::from(share_balance)
-            + U256::from(self.total_share_balance - 1))
             / U256::from(self.total_share_balance))
         .as_u128()
     }
