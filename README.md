@@ -23,6 +23,7 @@ Contents:
     - [Unstake](#unstake)
     - [Withdraw](#withdraw)
   - [DataStruct and Interfaces](#datastruct-and-interfaces)
+  - [Auditing](#auditing)
 
 ## Terminology
 
@@ -153,3 +154,6 @@ When a Staker performs the unstake or decrease stake operation, the contract wil
 ## DataStruct and Interfaces
 ![](images/datastruct_and_interfaces.png)
 ![](images/cc-anchor.png)
+
+## Auditing
+This contract (v1.1.2) had been audited by [BlockSec](https://blocksec.com/). Here is the [report](https://github.com/octopus-network/restaking-base/blob/main/blocksec_octopus_network_restaking_v1.0_signed.pdf).
